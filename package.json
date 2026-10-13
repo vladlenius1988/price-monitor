@@ -1,0 +1,66 @@
+{
+  "name": "retail-price-monitor",
+  "version": "4.21.0",
+  "priceMonitorEdition": "full",
+  "description": "Моніторинг цін за торговими марками в EVA, VARUS, MAKEUP, Аврорі, Notino та Rozetka",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:demo": "set PRICE_MONITOR_EDITION=demo&& electron .",
+    "start:licensed": "set PRICE_MONITOR_EDITION=licensed&& electron .",
+    "test": "node --test scraper.test.js demo-access.test.js license-access.test.js license-server/server-core.test.js license-server/local-server.test.js license-server/telegram-notifier.test.js license-server/worker-crypto.test.mjs",
+    "license-server:local": "node license-server/local-server.js",
+    "start:server": "electron license-server/app-main.js",
+    "dist": "electron-builder",
+    "dist:demo": "electron-builder --config electron-builder.demo.yml",
+    "dist:licensed": "electron-builder --config electron-builder.licensed.yml",
+    "dist:server": "electron-builder --config electron-builder.server.yml",
+    "dist:local-client": "electron-builder --config electron-builder.local-client.yml",
+    "dist:remote-client": "electron-builder --config electron-builder.remote-client.yml"
+  },
+  "devDependencies": {
+    "electron": "^43.4.1",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "write-excel-file": "^4.1.1"
+  },
+  "build": {
+    "appId": "com.vladlen.retailpricemonitor",
+    "productName": "Price Monitor",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "scraper.js",
+      "batch.js",
+      "saved-lists.js",
+      "search-history.js",
+      "comparison.js",
+      "comparison-store.js",
+      "archive-store.js",
+      "archive-tools.js",
+      "price-history-export.js",
+      "multi-store-export.js",
+      "change-report.js",
+      "result-view.js",
+      "demo-access.js",
+      "license-access.js",
+      "device-identity.js",
+      "license-public.pem",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "package.json"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "forceCodeSigning": false,
+      "target": ["nsis"]
+    },
+    "publish": null
+  }
+}

@@ -1,0 +1,50 @@
+appId: com.vladlen.retailpricemonitor.remotetest
+productName: Price Monitor Remote Test
+artifactName: Price Monitor Remote Test Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-remote-client
+files:
+  - main.js
+  - preload.js
+  - scraper.js
+  - batch.js
+  - saved-lists.js
+  - search-history.js
+  - comparison.js
+  - comparison-store.js
+  - archive-store.js
+  - archive-tools.js
+  - price-history-export.js
+  - multi-store-export.js
+  - change-report.js
+  - result-view.js
+  - demo-access.js
+  - license-access.js
+  - device-identity.js
+  - license-public.pem
+  - renderer.js
+  - index.html
+  - styles.css
+  - package.json
+extraMetadata:
+  name: retail-price-monitor-remote-test
+  productName: Price Monitor Remote Test
+  priceMonitorEdition: licensed
+  priceMonitorBundledLicense: false
+  priceMonitorLicenseServerUrl: http://188.163.88.129:45873
+  priceMonitorLiveLicenseIntervalMs: 5000
+  priceMonitorAppName: Price Monitor Remote Test
+  priceMonitorWindowTitle: Price Monitor — віддалений тест
+  priceMonitorAppId: com.vladlen.retailpricemonitor.remotetest
+  priceMonitorUserDataName: Price Monitor Remote Test
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null

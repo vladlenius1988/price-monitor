@@ -1,0 +1,40 @@
+node_modules/
+release/
+release-demo/
+release-licensed/
+release-*/
+tmp/
+.license-private/
+.codex-*/
+FM26_EXPORTER/
+
+# Готові дистрибутиви містять інсталятори, локальні ліцензії та серверні ресурси.
+Готовая версия */
+Готовая лицензионная версия */
+Готовый локальный сервер */
+Готовый удаленный сервер */
+
+# Зібрані артефакти не зберігаємо в історії вихідного коду.
+*.exe
+*.blockmap
+*.zip
+
+# Локальні або прив'язані до пристрою ліцензійні дані.
+paid-license.json
+*ліцензі*.json
+*запит*.json
+
+# Локальні дослідницькі дані та експорти.
+products.xlsx
+varus_console_log.txt
+varus_initial_state_raw.json
+varus_network_log.json
+varus_scripts_dump.json
+
+*.log
+.env
+.env.*
+!*.example
+license-server/data/
+license-server/.dev.vars
+license-server/wrangler.jsonc

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Інструкція Price Monitor 4.17.0</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#18202b;background:#f4f6fa;line-height:1.6}*{box-sizing:border-box}body{margin:0;padding:30px}main{max-width:980px;margin:auto}.hero,.card{margin-bottom:18px;border:1px solid #e2e7ef;border-radius:17px;background:#fff;box-shadow:0 10px 30px rgba(31,40,55,.06)}.hero{padding:28px;background:radial-gradient(circle at top right,rgba(239,106,44,.14),transparent 29rem),#fff}.card{padding:24px}h1{margin:0 0 8px;font-size:34px;line-height:1.2}h2{margin:0 0 14px;font-size:22px}h3{margin:22px 0 8px;font-size:17px}p{margin:8px 0;color:#4f5b6b}.eyebrow{margin:0 0 7px;color:#ef6a2c;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.subtitle{margin:0;color:#667085}.quick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:20px}.quick div{padding:11px;border:1px solid #e5e9ef;border-radius:10px;background:#fafbfc;color:#596579;font-size:12px}.quick strong{display:block;margin-bottom:3px;color:#ef6a2c;font-size:16px}.toc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.toc a{padding:9px 11px;border-radius:9px;background:#f7f8fa;color:#334155;font-size:13px;font-weight:700;text-decoration:none}.toc a:hover{background:#fff1e9;color:#c54f1b}.note,.warning,.success{margin:14px 0;padding:12px 14px;border-left:4px solid;border-radius:8px;font-size:13px}.note{border-color:#5b83c6;background:#f2f7ff;color:#3d5f91}.warning{border-color:#d59a24;background:#fff8e7;color:#79560e}.success{border-color:#2e9561;background:#edf9f2;color:#1d7046}ol,ul{margin:8px 0;padding-left:23px;color:#4f5b6b}li{margin:5px 0}.steps{counter-reset:step;list-style:none;padding:0}.steps>li{position:relative;min-height:38px;margin:12px 0;padding-left:44px}.steps>li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0;display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:#ef6a2c;color:#fff;font-weight:800}.table-wrap{overflow-x:auto;border:1px solid #e2e7ef;border-radius:11px}table{width:100%;min-width:720px;border-collapse:collapse;font-size:13px}th,td{padding:11px 12px;border-bottom:1px solid #edf0f4;text-align:left;vertical-align:top}th{background:#f7f8fa;color:#596579}td{color:#4f5b6b}code{padding:2px 5px;border-radius:5px;background:#f1f3f6;color:#334155}.footer{text-align:center;color:#8791a1;font-size:12px}@media(max-width:760px){body{padding:14px}.hero,.card{padding:18px}h1{font-size:28px}.quick,.toc{grid-template-columns:1fr 1fr}}@media print{body{padding:0;background:#fff}.hero,.card{box-shadow:none;break-inside:avoid}.toc{display:none}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <p class="eyebrow">Користувацька інструкція · версія 4.17.0</p>
+    <h1>Як користуватися Price Monitor</h1>
+    <p class="subtitle">Пошук цін за торговими марками в EVA, VARUS, MAKEUP, Аврорі, Notino та Rozetka. Інструкція розрахована на звичайну роботу без технічних налаштувань.</p>
+    <div class="quick">
+      <div><strong>1</strong>Оберіть магазин</div><div><strong>2</strong>Введіть марку</div><div><strong>3</strong>Увімкніть потрібні режими</div><div><strong>4</strong>Запустіть пошук</div><div><strong>5</strong>Збережіть Excel</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Зміст</h2>
+    <nav class="toc">
+      <a href="#install">Встановлення</a><a href="#search">Звичайний пошук</a><a href="#modes">Режими магазинів</a>
+      <a href="#results">Результати й Excel</a><a href="#stop">Зупинка й відновлення</a><a href="#lists">Списки та історія</a>
+      <a href="#archive">Архів перевірок</a><a href="#delete">Видалення з архіву</a><a href="#compare">Порівняння цін</a>
+      <a href="#backup">Резервна копія</a><a href="#transfer">Інший комп’ютер</a><a href="#problems">Якщо щось не працює</a>
+    </nav>
+  </section>
+
+  <section class="card" id="install">
+    <h2>1. Встановлення та оновлення</h2>
+    <ol class="steps">
+      <li>Запустіть файл <code>Price Monitor Setup 4.17.0.exe</code>.</li>
+      <li>Дочекайтеся завершення установки. Програма відкриється автоматично або з ярлика Price Monitor.</li>
+      <li>Нову версію можна встановлювати поверх старої: локальні списки, історія, архів і база порівняння зберігаються.</li>
+    </ol>
+    <div class="note">Для роботи потрібен тільки Setup. Файл <code>.blockmap</code> і папка <code>win-unpacked</code> користувачеві не потрібні. Встановлений Chrome або Edge певної версії не потрібен: програма має власний браузерний рушій.</div>
+  </section>
+
+  <section class="card" id="search">
+    <h2>2. Звичайний пошук</h2>
+    <ol class="steps">
+      <li>Натисніть кнопку потрібного магазину. За замовчуванням відкривається EVA.</li>
+      <li>У поле «Торгова марка» введіть бренд, наприклад <code>Nivea</code>.</li>
+      <li>Для кількох марок використовуйте кому, крапку з комою або новий рядок: <code>Nivea, Dove, Rexona</code>.</li>
+      <li>За потреби увімкніть додаткову галочку магазину.</li>
+      <li>Натисніть «Знайти товари». Результати з’являються в таблиці нижче.</li>
+    </ol>
+    <p>Якщо одна марка завершилася помилкою, програма продовжить інші марки й не видалить уже знайдені товари. У новому пошуку залишаються лише позиції, які сайт дозволяє придбати під час перевірки.</p>
+    <div class="success">У MAKEUP можна ввести валідний EAN/GTIN прямо в поле пошуку. Програма спробує знайти точний доступний варіант із цим штрихкодом.</div>
+  </section>
+
+  <section class="card" id="modes">
+    <h2>3. Додаткові режими магазинів</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Магазин</th><th>Що можна увімкнути</th><th>Коли використовувати</th></tr></thead>
+      <tbody>
+        <tr><td><strong>EVA</strong></td><td>Відтінки та варіанти</td><td>Коли потрібні окремі кольори з власними цінами. Звичайний режим швидший.</td></tr>
+        <tr><td><strong>VARUS</strong></td><td>Додаткового режиму немає</td><td>Звичайний швидкий пошук продуктового каталогу.</td></tr>
+        <tr><td><strong>MAKEUP</strong></td><td>Відтінки/варіанти; окремо EAN/GTIN</td><td>Для точних кольорів, об’ємів, складів UA/EU та штрихкодів. Детальний пошук довший.</td></tr>
+        <tr><td><strong>Аврора</strong></td><td>Варіанти</td><td>Для точних варіантів. Якщо сайт дає лише «в асортименті», програма не вигадує конкретний колір.</td></tr>
+        <tr><td><strong>Notino</strong></td><td>Відтінки та об’єми</td><td>Для окремих варіантів і їхніх цін. Промокодна ціна завжди показується окремо з умовою.</td></tr>
+        <tr><td><strong>Rozetka</strong></td><td>Перевірка продавців</td><td>Для точного продавця, його ціни й наявності. Для масових брендів може працювати дуже довго.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="results">
+    <h2>4. Таблиця результатів та Excel</h2>
+    <p>Таблицю можна шукати за назвою, маркою, штрихкодом, варіантом або продавцем. Доступні сортування, відбір за знижкою, зміною ціни та діапазоном поточної ціни.</p>
+    <ul>
+      <li>«Копіювати показані» копіює видимі після фільтрів рядки для вставки в Excel.</li>
+      <li>Галочка біля експорту визначає, зберігати лише показані рядки чи весь початковий результат.</li>
+      <li>Excel містить назву, марку, ціни зі знижкою й без неї, економію, відсоток, посилання та доступні спеціальні поля.</li>
+      <li>Штрихкод записується текстом, щоб Excel не видалив початкові нулі.</li>
+    </ul>
+    <div class="warning">Ціна Notino за промокодом не підміняє звичайну поточну ціну. Вона зберігається в окремій колонці разом з умовою акції.</div>
+  </section>
+
+  <section class="card" id="stop">
+    <h2>5. Зупинка та відновлення довгого пошуку</h2>
+    <p>Натисніть «Зупинити», якщо пошук більше не потрібен. Уже зібрані товари залишаться в таблиці та будуть доступні для Excel. Під час довгих операцій програма зберігає частковий результат і після аварійного закриття може запропонувати його відновити.</p>
+    <div class="note">Rozetka з продавцями — найповільніший режим. Якщо точні продавці не потрібні, вимкніть галочку до запуску. Надійність важливіша за швидкість, тому масова марка може оброблятися довго.</div>
+  </section>
+
+  <section class="card" id="lists">
+    <h2>6. Збережені списки та історія запитів</h2>
+    <h3>Збережений список</h3>
+    <p>Введіть марки, назвіть список і натисніть збереження. Разом із запитом запам’ятовуються режими варіантів, продавців і штрихкодів. Список можна застосувати, одразу запустити, дублювати, перейменувати або видалити.</p>
+    <h3>Історія</h3>
+    <p>Для кожного магазину окремо зберігаються 12 останніх запитів. Натисніть запис, щоб повернути запит та його галочки. Повторний однаковий запит оновлює старий пункт, а не створює дубль.</p>
+  </section>
+
+  <section class="card" id="archive">
+    <h2>7. Архів перевірок</h2>
+    <p>Повний успішний пошук автоматично потрапляє до локального архіву. Натисніть «Архів перевірок» у верхній частині програми.</p>
+    <ul>
+      <li>Фільтруйте за магазином, частиною запиту та датами UTC.</li>
+      <li>«Відкрити» показує старий результат без нового звернення до сайту.</li>
+      <li>«Повторити пошук» запускає свіжу перевірку з тим самим магазином, запитом і режимами.</li>
+      <li>«Експорт показаного архіву» зберігає всі видимі після фільтрів перевірки. Можна взяти кілька дат одного магазину.</li>
+      <li>«Зведений Excel із кількох магазинів» бере по одній вибраній перевірці різних магазинів.</li>
+    </ul>
+    <div class="warning">Архівні ціни й наявність стосуються дати перевірки, а не сьогоднішнього дня. У кожному Excel є дата, запит і пояснення джерела.</div>
+  </section>
+
+  <section class="card" id="delete">
+    <h2>8. Видалення помилкової перевірки</h2>
+    <p>Біля кожного запису архіву є кнопка «Видалити». Щоб прибрати групу, спочатку застосуйте фільтри, перевірте лічильник і натисніть «Видалити показані».</p>
+    <ol class="steps">
+      <li>Переконайтеся, що список містить саме непотрібні перевірки.</li>
+      <li>Натисніть кнопку видалення.</li>
+      <li>Прочитайте підтвердження з кількістю перевірок і товарних рядків.</li>
+      <li>Після видалення за потреби натисніть «Скасувати видалення».</li>
+    </ol>
+    <div class="warning">Скасування відновлює тільки останню видалену групу та доступне до закриття програми або наступного видалення. Видалені записи зникають з архівних звітів і графіка історії ціни. Списки, історія запитів та база наступного живого порівняння не змінюються.</div>
+  </section>
+
+  <section class="card" id="compare">
+    <h2>9. Порівняння цін</h2>
+    <p>Перший повний пошук створює базу. Наступний пошук того самого магазину, списку марок і режимів показує нові, дешевші, дорожчі, незмінні та зниклі з видачі позиції. Зупинений або помилковий пошук не замінює надійну базу.</p>
+    <p>В архіві можна вручну вибрати дві сумісні дати. Кнопка «Зміни за магазинами» за весь час автоматично знаходить найновішу сумісну пару для кожного магазину. Для періоду «вчора — сьогодні», 7, 30 днів або власних дат програма порівнює найранішу та найпізнішу сумісні перевірки тільки всередині вибраних меж. Повний трьохлистний Excel використовує той самий період, що показаний у вікні.</p>
+    <div class="note">«Зник із видачі» означає лише відсутність позиції в пізнішій збереженій видачі. Це не доказ нульового залишку сьогодні.</div>
+  </section>
+
+  <section class="card" id="backup">
+    <h2>10. Резервна копія</h2>
+    <p>«Зберегти копію» створює JSON-файл зі списками, історією запитів, базами порівняння та архівом усіх магазинів. «Відновити з копії» доповнює поточні дані: наявні записи не стираються повністю.</p>
+    <div class="success">Робіть резервну копію перед перенесенням на інший комп’ютер або важливим масовим очищенням архіву.</div>
+  </section>
+
+  <section class="card" id="transfer">
+    <h2>11. Перенесення на інший комп’ютер</h2>
+    <ol class="steps">
+      <li>На старому комп’ютері натисніть «Зберегти копію».</li>
+      <li>Передайте JSON-файл разом з актуальним Setup.</li>
+      <li>На новому комп’ютері встановіть програму й натисніть «Відновити з копії».</li>
+      <li>Перевірте списки, історію та архів.</li>
+    </ol>
+  </section>
+
+  <section class="card" id="problems">
+    <h2>12. Якщо щось не працює</h2>
+    <ul>
+      <li><strong>«Товарів не знайдено».</strong> Перевірте написання марки, вибраний магазин та наявність товару. Це нормальний результат, програма не повинна закриватися.</li>
+      <li><strong>Каталог не завантажився.</strong> Зачекайте й повторіть. Сайт може тимчасово не відповідати або обмежувати часті запити.</li>
+      <li><strong>Rozetka працює годинами.</strong> Масові марки мають дуже багато карток і продавців. Вимкніть перевірку продавців або зупиніть пошук і збережіть уже зібране.</li>
+      <li><strong>Portable поводиться нестабільно.</strong> Використовуйте Setup — це основний підтримуваний варіант.</li>
+      <li><strong>Потрібен інший браузер.</strong> Не потрібно: програма використовує вбудований рушій і не залежить від версії Chrome/Edge на комп’ютері.</li>
+      <li><strong>Оновлення сайту зламало один магазин.</strong> Запишіть магазин, марку, режим і текст помилки. Інші магазини та збережені дані при цьому мають залишитися цілими.</li>
+    </ul>
+  </section>
+
+  <p class="footer">Price Monitor 4.17.0 · 28 вересня 2026 року · Файл можна відкрити подвійним натисканням у будь-якому сучасному браузері та надрукувати.</p>
+</main>
+</body>
+</html>

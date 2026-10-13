@@ -1,0 +1,2 @@
+ADMIN_TOKEN=replace-with-a-long-random-local-token
+LICENSE_PRIVATE_KEY_B64=base64-of-the-entire-test-private-pem

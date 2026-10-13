@@ -1,0 +1,49 @@
+appId: com.vladlen.retailpricemonitor.localclient
+productName: Price Monitor Local Client
+artifactName: Price Monitor Local Client Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-local-client
+files:
+  - main.js
+  - preload.js
+  - scraper.js
+  - batch.js
+  - saved-lists.js
+  - search-history.js
+  - comparison.js
+  - comparison-store.js
+  - archive-store.js
+  - archive-tools.js
+  - price-history-export.js
+  - multi-store-export.js
+  - change-report.js
+  - result-view.js
+  - demo-access.js
+  - license-access.js
+  - device-identity.js
+  - license-public.pem
+  - renderer.js
+  - index.html
+  - styles.css
+  - package.json
+extraMetadata:
+  name: retail-price-monitor-local-client
+  productName: Price Monitor Local Client
+  priceMonitorEdition: licensed
+  priceMonitorBundledLicense: false
+  priceMonitorLicenseServerUrl: http://127.0.0.1:8787
+  priceMonitorAppName: Price Monitor Local Client
+  priceMonitorWindowTitle: Price Monitor — локальний сервер
+  priceMonitorAppId: com.vladlen.retailpricemonitor.localclient
+  priceMonitorUserDataName: Price Monitor Local Client
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null

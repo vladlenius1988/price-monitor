@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Моніторинг цін</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Моніторинг роздрібних цін</p>
+        <h1>Ціни за торговою маркою</h1>
+        <p class="subtitle">Оберіть магазин, введіть одну або кілька марок та експортуйте актуальні ціни в Excel.</p>
+      </div>
+      <div class="header-actions">
+        <button id="show-guide" class="capabilities-button" type="button">Інструкція</button>
+        <button id="show-archive" class="capabilities-button" type="button">Архів перевірок</button>
+        <button id="show-change-report" class="capabilities-button" type="button">Зміни за магазинами</button>
+        <button id="show-capabilities" class="capabilities-button" type="button">Можливості магазинів</button>
+        <div class="engine-note" title="Chrome на комп’ютері не потрібен">
+          <span class="engine-dot" aria-hidden="true"></span>
+          Вбудований браузер
+        </div>
+      </div>
+    </header>
+
+    <section id="demo-access-banner" class="demo-access-banner" aria-live="polite" hidden>
+      <div>
+        <strong id="access-banner-title">Демонстраційна версія</strong>
+        <span id="demo-access-summary">Перевіряю доступ…</span>
+      </div>
+      <small id="demo-access-details">До 3 марок і до 1000 рядків в одному пошуку.</small>
+      <div id="license-server-actions" class="license-server-actions" hidden>
+        <button id="refresh-license" class="compact-button" type="button">Перевірити ліцензію зараз</button>
+        <button id="check-update" class="compact-button" type="button">Перевірити оновлення</button>
+        <small id="license-refresh-status"></small>
+      </div>
+      <div id="update-notice" class="update-notice" hidden>
+        <div><strong id="update-title">Доступне оновлення</strong><small id="update-notes"></small></div>
+        <button id="install-update" class="compact-button accent-button" type="button">Завантажити й встановити</button>
+      </div>
+      <div id="license-activation" class="license-activation" hidden>
+        <div id="online-activation" class="activation-code-row" hidden>
+          <input id="activation-code" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Код активації">
+          <button id="activate-license" class="compact-button accent-button" type="button">Активувати</button>
+        </div>
+        <button id="export-license-request" class="compact-button" type="button">Зберегти запит</button>
+        <button id="import-license" class="compact-button" type="button">Встановити ліцензію</button>
+        <small id="license-action-status" class="license-action-status"></small>
+      </div>
+    </section>
+
+    <section class="search-card" aria-label="Пошук товарів">
+      <div class="store-tabs" aria-label="Магазин">
+        <button type="button" class="store-tab is-active" data-store="eva" aria-pressed="true"><span class="store-mark eva-mark" aria-hidden="true">E</span>EVA</button>
+        <button type="button" class="store-tab" data-store="varus" aria-pressed="false"><span class="store-mark varus-mark" aria-hidden="true">V</span>VARUS</button>
+        <button type="button" class="store-tab" data-store="makeup" aria-pressed="false"><span class="store-mark makeup-mark" aria-hidden="true">M</span>MAKEUP</button>
+        <button type="button" class="store-tab" data-store="aurora" aria-pressed="false"><span class="store-mark aurora-mark" aria-hidden="true">А</span>Аврора</button>
+        <button type="button" class="store-tab" data-store="notino" aria-pressed="false"><span class="store-mark notino-mark" aria-hidden="true">N</span>Notino</button>
+        <button type="button" class="store-tab" data-store="rozetka" aria-pressed="false"><span class="store-mark rozetka-mark" aria-hidden="true">R</span>Rozetka</button>
+      </div>
+
+      <div class="search-row">
+        <div class="search-field">
+          <label id="brand-query-label" for="brand-query">Торгові марки</label>
+          <div class="input-wrap">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
+            <input id="brand-query" type="text" autocomplete="off" spellcheck="false" placeholder="Наприклад: Nivea, Dove, L'Oreal Paris">
+          </div>
+          <div id="brand-suggestions" class="suggestions" hidden></div>
+        </div>
+        <button id="parse-products" class="primary-button" type="button">Знайти товари</button>
+        <button id="cancel-products" class="secondary-button" type="button" hidden>Зупинити</button>
+      </div>
+
+      <details class="saved-lists-panel">
+        <summary>Збережені списки марок</summary>
+        <div class="saved-lists-content">
+          <div class="saved-list-load">
+            <select id="saved-list-select" aria-label="Збережений список">
+              <option value="">Оберіть список для цього магазину</option>
+            </select>
+            <button id="apply-saved-list" class="compact-button" type="button" disabled>Підставити</button>
+            <button id="run-saved-list" class="compact-button accent-button" type="button" disabled>Запустити</button>
+            <button id="duplicate-saved-list" class="compact-button" type="button" disabled>Дублювати</button>
+            <button id="rename-saved-list" class="compact-button" type="button" disabled>Перейменувати</button>
+            <button id="delete-saved-list" class="compact-button danger-button" type="button" disabled>Видалити</button>
+          </div>
+          <div class="saved-list-save">
+            <input id="saved-list-name" type="text" maxlength="80" autocomplete="off" placeholder="Назва, наприклад «Щотижневий моніторинг»">
+            <button id="save-current-list" class="compact-button accent-button" type="button">Зберегти поточний запит</button>
+          </div>
+          <div class="saved-list-tools">
+            <button id="export-saved-lists" class="compact-button" type="button" disabled>Резервна копія</button>
+            <button id="import-saved-lists" class="compact-button" type="button">Відновити з копії</button>
+          </div>
+          <small>Копія містить списки, історію, бази порівняння та архів перевірок усіх магазинів. Під час відновлення наявні дані не стираються.</small>
+        </div>
+      </details>
+
+      <details class="history-panel">
+        <summary>Останні пошуки <span id="search-history-count"></span></summary>
+        <div class="history-content">
+          <div id="search-history-list" class="history-list"></div>
+          <button id="clear-search-history" class="compact-button danger-button" type="button" disabled>Очистити історію цього магазину</button>
+          <small>Зберігаються 12 останніх запитів окремо для кожного магазину. «Підставити» повертає налаштування без запуску, «Повторити» одразу починає пошук.</small>
+        </div>
+      </details>
+
+      <label id="variants-option" class="variants-option">
+        <input id="include-variants" type="checkbox">
+        <span><strong>Шукати відтінки та варіанти</strong><small>Для EVA, MAKEUP, Notino та Аврори: кожен доступний варіант матиме окремий рядок зі своєю ціною. Якщо Аврора пише лише «в асортименті», програма чесно це позначить.</small></span>
+      </label>
+
+      <label id="sellers-option" class="variants-option" hidden>
+        <input id="include-sellers" type="checkbox" checked>
+        <span><strong>Перевіряти продавців</strong><small>Для Rozetka: повільніше, зате програма відкриє основні й додаткові пропозиції, відкине відсутні та додасть точного продавця.</small></span>
+      </label>
+
+      <label id="barcodes-option" class="variants-option" hidden>
+        <input id="include-barcodes" type="checkbox">
+        <span><strong>Збирати штрихкоди</strong><small>Для MAKEUP: повільніше, бо програма відкриє кожну картку. У рядок потрапить тільки справжній EAN/GTIN; внутрішній код товару не підставляється.</small></span>
+      </label>
+
+      <div class="status-row" aria-live="polite">
+        <span id="status-spinner" class="spinner" hidden aria-hidden="true"></span>
+        <span id="status" data-type="loading">Завантаження інтерфейсу…</span>
+      </div>
+    </section>
+
+    <section class="results-card" aria-label="Результати">
+      <div class="results-header">
+        <div>
+          <h2>Результати</h2>
+          <p id="result-meta">Тут з’явиться знайдений асортимент</p>
+        </div>
+        <button id="export-excel" class="excel-button" type="button" disabled>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 3v5h5M6 3h8l5 5v13H6V3Zm3 9 6 6m0-6-6 6"/></svg>
+          Експорт в Excel
+        </button>
+      </div>
+
+      <div id="capture-notice" class="capture-notice" hidden></div>
+      <div id="result-tools" class="result-tools" hidden>
+        <div class="result-filter">
+          <input id="result-filter" type="search" autocomplete="off" placeholder="Фільтр за назвою, маркою, штрихкодом, варіантом або продавцем">
+          <button id="clear-result-filter" class="compact-button" type="button" disabled>Очистити</button>
+        </div>
+        <select id="result-sort" aria-label="Сортування результатів">
+          <option value="original">Порядок сайту</option>
+          <option value="name-asc">Назва: А → Я</option>
+          <option value="brand-asc">Марка: А → Я</option>
+          <option value="price-asc">Ціна: спочатку дешевші</option>
+          <option value="price-desc">Ціна: спочатку дорожчі</option>
+          <option value="discount-desc">Знижка: спочатку найбільші</option>
+          <option value="discount-asc">Знижка: спочатку найменші</option>
+        </select>
+        <select id="result-change-filter" aria-label="Фільтр змін" hidden>
+          <option value="all">Усі зміни</option>
+          <option value="new">Лише нові товари</option>
+          <option value="cheaper">Лише подешевшали</option>
+          <option value="expensive">Лише подорожчали</option>
+          <option value="unchanged">Лише без змін</option>
+        </select>
+        <select id="result-sale-filter" aria-label="Фільтр звичайних знижок">
+          <option value="all">Усі ціни</option>
+          <option value="discounted">Лише зі знижкою</option>
+          <option value="regular">Лише без знижки</option>
+        </select>
+        <div class="price-range" aria-label="Діапазон поточної ціни">
+          <span>Ціна</span>
+          <input id="result-min-price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="від" aria-label="Мінімальна ціна">
+          <span>—</span>
+          <input id="result-max-price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="до" aria-label="Максимальна ціна">
+        </div>
+        <button id="copy-results" class="compact-button" type="button" disabled>Копіювати таблицю</button>
+        <label class="export-visible-option">
+          <input id="export-visible-only" type="checkbox" checked>
+          <span>Експортувати лише показані рядки</span>
+        </label>
+        <span id="result-visible-count" class="result-visible-count"></span>
+      </div>
+
+      <div id="result-summary" class="result-summary" hidden aria-label="Зведення результатів">
+        <div><small>Показано</small><strong id="summary-total">0</strong></div>
+        <div><small>Зі знижкою</small><strong id="summary-discounted">0</strong></div>
+        <div><small>Найнижча ціна</small><strong id="summary-cheapest">—</strong></div>
+        <div><small>Найбільша знижка</small><strong id="summary-largest-discount">—</strong></div>
+      </div>
+
+      <div id="comparison-summary" class="comparison-summary" hidden>
+        <div>
+          <strong id="comparison-title"></strong>
+          <small id="comparison-caption"></small>
+        </div>
+        <div id="comparison-counts" class="comparison-counts"></div>
+        <details id="missing-products" class="missing-products" hidden>
+          <summary id="missing-products-title"></summary>
+          <div id="missing-products-list" class="missing-products-list"></div>
+        </details>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">₴</div>
+        <strong>Поки що нічого не шукали</strong>
+        <span>Оберіть магазин і вкажіть одну або кілька торгових марок.</span>
+      </div>
+
+      <div id="table-wrap" class="table-wrap" hidden>
+        <table id="product-table">
+          <thead><tr><th>Назва товару</th><th>Торгова марка</th><th class="barcode-column" hidden>Штрихкод</th><th class="variant-column" hidden>Варіант / відтінок / об’єм</th><th class="seller-column" hidden>Продавець</th><th class="comparison-column" hidden>Зміна</th><th>Ціна зі знижкою</th><th>Ціна без знижки</th><th>Економія</th><th>Знижка, %</th><th class="promo-column" hidden>Ціна за промокодом</th><th class="promo-column" hidden>Промокод / умова</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="no-filter-results" class="no-filter-results" hidden>За цим фільтром нічого не знайдено.</div>
+    </section>
+  </main>
+
+  <dialog id="archive-dialog" class="capabilities-dialog" aria-labelledby="archive-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Збережені результати</p><h2 id="archive-title">Архів перевірок</h2></div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">Тут зберігаються лише повні успішні пошуки. Архів можна відкрити без інтернету та експортувати, але його ціни й наявність стосуються дати перевірки, а не сьогоднішнього дня.</p>
+    <div class="archive-toolbar">
+      <label>Магазин<select id="archive-store-filter"><option value="all">Усі магазини</option><option value="eva">EVA</option><option value="varus">VARUS</option><option value="makeup">MAKEUP</option><option value="aurora">Аврора</option><option value="notino">Notino</option><option value="rozetka">Rozetka</option></select></label>
+      <label>Запит<input id="archive-query-filter" type="search" placeholder="Марка або частина запиту"></label>
+      <label>Від (UTC)<input id="archive-date-from" type="date"></label>
+      <label>До (UTC)<input id="archive-date-to" type="date"></label>
+      <button id="archive-clear-filters" class="compact-button" type="button">Очистити</button>
+    </div>
+    <p id="archive-filter-summary" class="archive-filter-summary" aria-live="polite"></p>
+    <div class="archive-filter-export">
+      <span id="archive-filter-export-hint">У Excel потраплять усі перевірки, показані після фільтрів.</span>
+      <div class="archive-filter-actions">
+        <button id="archive-filter-export-button" class="compact-button accent-button" type="button" disabled>Експорт показаного архіву</button>
+        <button id="archive-filter-delete-button" class="compact-button danger-button" type="button" disabled>Видалити показані</button>
+      </div>
+    </div>
+    <p id="archive-filter-export-status" class="archive-filter-summary" role="status" aria-live="polite"></p>
+    <div class="archive-delete-status-row">
+      <span id="archive-delete-status" role="status" aria-live="polite"></span>
+      <button id="archive-delete-undo" class="compact-button" type="button" hidden>Скасувати видалення</button>
+    </div>
+    <div class="archive-compare-panel">
+      <strong>Порівняти дві перевірки</strong>
+      <div class="archive-compare-controls">
+        <label>Базова перевірка<select id="archive-compare-base"></select></label>
+        <label>Пізніша перевірка<select id="archive-compare-current"></select></label>
+        <button id="archive-compare" class="compact-button" type="button" disabled>Порівняти</button>
+      </div>
+      <p id="archive-compare-hint" aria-live="polite">Потрібні дві повні перевірки однакового запиту й режимів в одному магазині. Скорочені архіви не порівнюються.</p>
+    </div>
+    <details id="combined-export-panel" class="archive-combined-panel">
+      <summary>Зведений Excel із кількох магазинів</summary>
+      <p>Оберіть по одній збереженій перевірці щонайменше двох магазинів. За замовчуванням вибрана найновіша перевірка кожного магазину. Це архівні дані, не новий спільний пошук.</p>
+      <div id="combined-export-stores" class="combined-export-stores"></div>
+      <div class="combined-export-footer">
+        <span id="combined-export-hint" aria-live="polite"></span>
+        <button id="combined-export-button" class="primary-button" type="button" disabled>Зберегти зведений Excel</button>
+      </div>
+      <p id="combined-export-status" class="combined-export-status" role="status" aria-live="polite"></p>
+    </details>
+    <div id="archive-list" class="archive-list" aria-live="polite"></div>
+    <p class="archive-limit">Зберігаються до 60 перевірок, до 5000 рядків / 8 МБ у кожній та до 100 000 рядків / 24 МБ загалом. Найстаріші перевірки поступово вилучаються; скорочений результат позначається явно. Архів входить до резервної копії.</p>
+    <form method="dialog" class="capabilities-footer"><button class="primary-button" type="submit">Закрити</button></form>
+  </dialog>
+
+  <dialog id="change-report-dialog" class="capabilities-dialog" aria-labelledby="change-report-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Збережені перевірки</p><h2 id="change-report-title">Зміни за магазинами</h2></div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">За весь час програма знаходить найновішу сумісну пару повних перевірок однакового запиту й режимів. Для вибраного періоду вона порівнює найранішу та найпізнішу сумісні перевірки всередині його меж. Це архівні дані без нового пошуку; дати магазинів можуть відрізнятися. «Зник» означає лише відсутність у пізнішій видачі.</p>
+    <section class="change-report-period" aria-labelledby="change-report-period-title">
+      <div class="change-report-period-heading">
+        <strong id="change-report-period-title">Період звіту</strong>
+        <div class="change-report-presets" aria-label="Швидкий вибір періоду">
+          <button class="compact-button" type="button" data-change-report-days="2">Вчора → сьогодні</button>
+          <button class="compact-button" type="button" data-change-report-days="7">7 днів</button>
+          <button class="compact-button" type="button" data-change-report-days="30">30 днів</button>
+          <button id="change-report-all-time" class="compact-button" type="button">Увесь архів</button>
+        </div>
+      </div>
+      <div class="change-report-period-fields">
+        <label>Від (UTC)<input id="change-report-date-from" type="date"></label>
+        <label>До (UTC)<input id="change-report-date-to" type="date"></label>
+        <button id="change-report-apply-period" class="primary-button" type="button">Побудувати звіт</button>
+      </div>
+      <p id="change-report-period-status" class="archive-filter-summary" role="status" aria-live="polite">Показано найновішу сумісну пару за весь час.</p>
+    </section>
+    <div id="change-report-stores" class="change-report-stores" aria-live="polite">Завантажую збережені перевірки…</div>
+    <div class="change-report-filters">
+      <label>Магазин<select id="change-report-store-filter"><option value="all">Усі магазини</option><option value="eva">EVA</option><option value="varus">VARUS</option><option value="makeup">MAKEUP</option><option value="aurora">Аврора</option><option value="notino">Notino</option><option value="rozetka">Rozetka</option></select></label>
+      <label>Зміна<select id="change-report-status-filter"><option value="all">Усі зміни</option><option value="new">Нові у видачі</option><option value="cheaper">Подешевшали</option><option value="expensive">Подорожчали</option><option value="missing">Зникли з видачі</option></select></label>
+      <label>Товар<input id="change-report-text-filter" type="search" placeholder="Назва, марка, штрихкод…"></label>
+    </div>
+    <p id="change-report-count" class="archive-filter-summary" aria-live="polite"></p>
+    <div class="change-report-table-wrap">
+      <table class="change-report-table">
+        <thead><tr><th>Магазин</th><th>Товар</th><th>Зміна</th><th>Було</th><th>Стало</th><th>Різниця</th></tr></thead>
+        <tbody id="change-report-rows"></tbody>
+      </table>
+    </div>
+    <p class="archive-limit">На екрані — до 200 рядків після фільтрів. Excel містить усі зміни, окремий лист зниклих позицій і дати всіх використаних перевірок. Звіт не змінює архів та базу наступного живого пошуку.</p>
+    <p id="change-report-export-status" class="archive-limit" aria-live="polite"></p>
+    <div class="capabilities-footer history-footer"><button id="export-change-report" class="primary-button" type="button" disabled>Експорт усього звіту в Excel</button><form method="dialog"><button class="compact-button" type="submit">Закрити</button></form></div>
+  </dialog>
+
+  <dialog id="price-history-dialog" class="capabilities-dialog" aria-labelledby="price-history-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Історія поточної ціни</p><h2 id="price-history-title">Історія ціни</h2></div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p id="price-history-context" class="capabilities-intro"></p>
+    <div id="price-history-stats" class="price-history-stats"></div>
+    <div id="price-history-chart" class="price-history-chart"></div>
+    <div class="price-history-table-wrap"><table class="price-history-table"><thead><tr><th>Дата перевірки</th><th>Поточна ціна</th><th>Звичайна ціна</th><th>Запит</th></tr></thead><tbody id="price-history-rows"></tbody></table></div>
+    <p class="archive-limit">Історія накопичується з версії 4.10.0. Кожна точка — реальна ціна у збереженій перевірці. Відсутність товару в іншому пошуку не означає нульову ціну або відсутність залишку. Магазини, варіанти й продавці не змішуються; старі точки зникають разом із найстарішими перевірками архіву.</p>
+    <p id="price-history-export-status" class="archive-limit" aria-live="polite"></p>
+    <form method="dialog" class="capabilities-footer history-footer"><button id="export-price-history" class="primary-button" type="button" disabled>Історія в Excel</button><button class="compact-button" type="submit">Закрити</button></form>
+  </dialog>
+
+  <dialog id="guide-dialog" class="capabilities-dialog guide-dialog" aria-labelledby="guide-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Вбудована довідка Price Monitor 4.18.1</p><h2 id="guide-title">Як користуватися програмою</h2></div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">Інструкція працює без інтернету та зовнішнього браузера. Оберіть розділ або знайдіть потрібні слова.</p>
+    <div class="guide-toolbar">
+      <label for="guide-search">Пошук в інструкції</label>
+      <div><input id="guide-search" type="search" placeholder="Наприклад: резервна копія, штрихкод, Rozetka"><button id="guide-clear-search" class="compact-button" type="button">Очистити</button></div>
+      <small id="guide-filter-count" aria-live="polite"></small>
+    </div>
+    <div class="guide-layout">
+      <nav id="guide-nav" class="guide-nav" aria-label="Розділи інструкції">
+        <button type="button" data-guide-target="guide-install">1. Встановлення</button>
+        <button type="button" data-guide-target="guide-searching">2. Пошук товарів</button>
+        <button type="button" data-guide-target="guide-modes">3. Режими магазинів</button>
+        <button type="button" data-guide-target="guide-results">4. Результати й Excel</button>
+        <button type="button" data-guide-target="guide-stop">5. Зупинка</button>
+        <button type="button" data-guide-target="guide-lists">6. Списки та історія</button>
+        <button type="button" data-guide-target="guide-archive">7. Архів</button>
+        <button type="button" data-guide-target="guide-delete">8. Видалення</button>
+        <button type="button" data-guide-target="guide-compare">9. Порівняння</button>
+        <button type="button" data-guide-target="guide-backup">10. Резервна копія</button>
+        <button type="button" data-guide-target="guide-transfer">11. Інший комп’ютер</button>
+        <button type="button" data-guide-target="guide-problems">12. Якщо є проблема</button>
+      </nav>
+      <div id="guide-sections" class="guide-sections">
+        <section id="guide-install" data-guide-section>
+          <h3>1. Встановлення та оновлення</h3>
+          <ol><li>Запустіть інсталяційний файл потрібної версії: <code>Price Monitor Setup</code> для повної, <code>Price Monitor Demo Setup</code> для демонстраційної або <code>Price Monitor Licensed Setup</code> для ліцензійної версії.</li><li>Дочекайтеся завершення встановлення.</li><li>Оновлюйте кожну версію у власній папці: <code>Price Monitor</code>, <code>Price Monitor Demo</code> або <code>Price Monitor Licensed</code>.</li></ol>
+          <p class="guide-note">Для роботи потрібен тільки відповідний Setup. Chrome або Edge певної версії не потрібні: програма має власний браузерний рушій.</p>
+          <p class="guide-warning"><strong>Важливо:</strong> повну, демонстраційну й ліцензійну версії не можна встановлювати в одну папку. Якщо Windows покаже попередження безпеки, натисніть «Докладніше», а потім «Виконати все одно».</p>
+          <p class="guide-warning"><strong>Обмеження демо:</strong> 14 календарних днів, 20 успішних пошуків, до 3 марок за запуск і до 1000 рядків у результаті. Лічильник видно у верхній панелі.</p>
+          <p class="guide-note"><strong>Ліцензійна версія:</strong> строк оплати та код пристрою видно у верхній панелі. Для онлайн-активації введіть отриманий код. Якщо сервер ще не підключено або потрібен аварійний офлайн-доступ, натисніть «Зберегти запит», надішліть JSON-файл власнику програми, а отриманий підписаний файл встановіть кнопкою «Встановити ліцензію». Ліцензія працює тільки на відповідному комп’ютері.</p>
+        </section>
+        <section id="guide-searching" data-guide-section>
+          <h3>2. Звичайний пошук товарів</h3>
+          <ol><li>Оберіть магазин. За замовчуванням відкривається EVA.</li><li>Введіть торгову марку.</li><li>Кілька марок розділяйте комою, крапкою з комою або новим рядком.</li><li>За потреби увімкніть додатковий режим.</li><li>Натисніть «Знайти товари».</li></ol>
+          <p>Помилка однієї марки не видаляє вже знайдені товари. У новому пошуку залишаються позиції, які сайт дозволяє придбати під час перевірки.</p>
+        </section>
+        <section id="guide-modes" data-guide-section>
+          <h3>3. Додаткові режими магазинів</h3>
+          <ul><li><strong>EVA:</strong> точні відтінки та варіанти з власними цінами.</li><li><strong>MAKEUP:</strong> відтінки/об’єми, склади UA/EU; окремо збір EAN/GTIN. Валідний штрихкод можна ввести прямо в пошук.</li><li><strong>Аврора:</strong> точні варіанти або чесна позначка «в асортименті».</li><li><strong>Notino:</strong> відтінки й об’єми; промокодна ціна та її умова окремо.</li><li><strong>Rozetka:</strong> точні продавці, їхні ціни та наявність. Для масової марки цей режим може працювати дуже довго.</li><li><strong>VARUS:</strong> звичайний швидкий пошук без додаткового режиму.</li></ul>
+        </section>
+        <section id="guide-results" data-guide-section>
+          <h3>4. Результати, фільтри та Excel</h3>
+          <p>Таблицю можна фільтрувати за назвою, маркою, штрихкодом, варіантом, продавцем, знижкою, зміною та діапазоном ціни. Доступне сортування за назвою, маркою, ціною або знижкою.</p>
+          <ul><li>«Копіювати показані» готує видимі рядки для вставки в Excel.</li><li>Експорт може зберегти показані після фільтрів рядки або весь результат.</li><li>Штрихкод записується текстом, щоб зберегти початкові нулі.</li><li>Умовна ціна Notino за промокодом не підміняє звичайну поточну ціну.</li></ul>
+        </section>
+        <section id="guide-stop" data-guide-section>
+          <h3>5. Зупинка та відновлення</h3>
+          <p>Натисніть «Зупинити», якщо пошук більше не потрібен. Уже зібрані товари залишаться в таблиці та будуть доступні для Excel. Довгі пошуки періодично зберігають частковий результат, який можна відновити після аварійного закриття.</p>
+          <p class="guide-note">Rozetka з продавцями — найповільніший режим. Якщо продавці не потрібні, вимкніть галочку до запуску.</p>
+        </section>
+        <section id="guide-lists" data-guide-section>
+          <h3>6. Збережені списки та історія</h3>
+          <p>Запит можна назвати, зберегти, застосувати, одразу запустити, дублювати, перейменувати або видалити. Разом із марками запам’ятовуються галочки варіантів, продавців і штрихкодів.</p>
+          <p>Для кожного магазину окремо зберігаються 12 останніх запитів. Натисніть запис, щоб повернути запит і режими.</p>
+        </section>
+        <section id="guide-archive" data-guide-section>
+          <h3>7. Архів перевірок</h3>
+          <ul><li>Фільтруйте архів за магазином, частиною запиту та датами UTC.</li><li>«Відкрити» показує старий результат без звернення до сайту.</li><li>«Повторити пошук» запускає свіжу перевірку з тим самим запитом і режимами.</li><li>«Експорт показаного архіву» бере всі видимі перевірки, зокрема кілька дат одного магазину.</li><li>Зведений Excel бере по одній перевірці вибраних магазинів.</li></ul>
+          <p class="guide-warning">Архівні ціни та наявність стосуються дати перевірки, а не сьогоднішнього дня.</p>
+        </section>
+        <section id="guide-delete" data-guide-section>
+          <h3>8. Видалення помилкової перевірки</h3>
+          <p>Біля кожного запису є «Видалити». Після фільтрів «Видалити показані» прибирає всю видиму групу. Перед зміною програма показує кількість перевірок і товарних рядків.</p>
+          <p class="guide-warning">«Скасувати видалення» повертає тільки останню групу й діє до закриття програми або наступного видалення. Списки, історія запитів та база нового живого порівняння не змінюються.</p>
+        </section>
+        <section id="guide-compare" data-guide-section>
+          <h3>9. Порівняння цін</h3>
+          <p>Перший повний пошук створює базу. Наступний однаковий пошук показує нові, дешевші, дорожчі, незмінні та зниклі з видачі позиції. Зупинений або помилковий результат базу не замінює.</p>
+          <p>В архіві можна вручну порівняти дві сумісні дати. «Зміни за магазинами» за весь час знаходять останню сумісну пару кожного магазину. Для періоду «вчора — сьогодні», 7, 30 днів або власних дат програма бере найранішу та найпізнішу сумісні перевірки тільки всередині цих меж. Excel використовує той самий період.</p>
+          <p class="guide-note">«Зник із видачі» не є доказом нульового залишку сьогодні.</p>
+        </section>
+        <section id="guide-backup" data-guide-section>
+          <h3>10. Резервна копія</h3>
+          <p>«Зберегти копію» створює JSON-файл зі списками, історією запитів, базами порівняння та архівом усіх магазинів. «Відновити з копії» доповнює поточні дані, а не стирає їх повністю.</p>
+          <p class="guide-note">Робіть копію перед перенесенням на інший комп’ютер або важливим масовим очищенням архіву.</p>
+        </section>
+        <section id="guide-transfer" data-guide-section>
+          <h3>11. Перенесення на інший комп’ютер</h3>
+          <ol><li>На старому комп’ютері натисніть «Зберегти копію».</li><li>Встановіть актуальний Setup на новому комп’ютері.</li><li>Натисніть «Відновити з копії» та виберіть JSON-файл.</li><li>Перевірте списки, історію й архів.</li></ol>
+        </section>
+        <section id="guide-problems" data-guide-section>
+          <h3>12. Якщо щось не працює</h3>
+          <ul><li><strong>Товарів не знайдено:</strong> перевірте марку, магазин і наявність. Це нормальний результат, програма не повинна закриватися.</li><li><strong>Каталог не завантажився:</strong> зачекайте й повторіть — сайт може тимчасово не відповідати.</li><li><strong>Rozetka працює годинами:</strong> вимкніть продавців або зупиніть пошук і збережіть уже зібране.</li><li><strong>Portable нестабільна:</strong> використовуйте Setup — це підтримуваний варіант.</li><li><strong>Один магазин перестав працювати:</strong> запишіть магазин, марку, режим і текст помилки.</li></ul>
+          <p>Для повідомлення власнику програми надішліть одним повідомленням: дату й час, магазин, марку/запит, увімкнені режими (варіанти, продавці, штрихкоди), що очікували, що сталося, точний текст помилки та скриншот. Поки окремої веб-форми немає — використовуйте звичний Telegram або електронну пошту.</p>
+          <p class="guide-note"><strong>Простий журнал помилок:</strong> записуйте кожен випадок у вигляді «дата · магазин · запит · режим · результат · текст помилки · скриншот · чи повторилося після запуску». Не записуйте паролі або інші секретні дані.</p>
+        </section>
+        <div id="guide-empty" class="guide-empty" hidden>За цими словами нічого не знайдено. Спробуйте коротший запит.</div>
+      </div>
+    </div>
+    <form method="dialog" class="capabilities-footer"><button class="primary-button" type="submit">Закрити інструкцію</button></form>
+  </dialog>
+
+  <dialog id="capabilities-dialog" class="capabilities-dialog" aria-labelledby="capabilities-title">
+    <div class="capabilities-heading">
+      <div>
+        <p class="eyebrow">Довідка Price Monitor 4.18.1</p>
+        <h2 id="capabilities-title">Що вміє програма</h2>
+      </div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період і експортує повний звіт без інтернет-пошуку.</p>
+    <div class="capabilities-table-wrap">
+      <table class="capabilities-table">
+        <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти</th><th>Штрихкоди</th><th>Особливості</th></tr></thead>
+        <tbody>
+          <tr><th>EVA</th><td><span class="feature-yes">Є</span></td><td><span class="feature-yes">За бажанням</span><small>точні відтінки та їхні ціни</small></td><td><span class="feature-no">Ще немає</span><small>сайт віддає лише внутрішні коди</small></td><td>Звичайні та конфігуровані картки</td></tr>
+          <tr><th>VARUS</th><td><span class="feature-yes">Є</span></td><td><span class="feature-no">Немає</span></td><td><span class="feature-no">Немає</span></td><td>Швидкий продуктовий каталог</td></tr>
+          <tr><th>MAKEUP</th><td><span class="feature-yes">Є</span></td><td><span class="feature-yes">За бажанням</span><small>відтінки, об’єми, склади UA/EU</small></td><td><span class="feature-yes">Є</span><small>збір EAN/GTIN і прямий пошук за кодом</small></td><td>Код прив’язується лише до точного варіанта</td></tr>
+          <tr><th>Аврора</th><td><span class="feature-partial">Без підказок</span></td><td><span class="feature-partial">За бажанням</span><small>точні варіанти або чесна позначка «в асортименті»</small></td><td><span class="feature-no">Немає</span></td><td>Перевірка фактичної можливості купити</td></tr>
+          <tr><th>Notino</th><td><span class="feature-yes">Є</span></td><td><span class="feature-yes">За бажанням</span><small>відтінки й об’єми з власними цінами</small></td><td><span class="feature-no">Немає</span></td><td>Окремо ціна за промокодом та її умова</td></tr>
+          <tr><th>Rozetka</th><td><span class="feature-partial">Без підказок</span></td><td><span class="feature-partial">Через пропозиції</span></td><td><span class="feature-no">Немає</span></td><td>Усі продавці, їхні ціни й фактична наявність; довгі пошуки відновлюються</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="capabilities-plans">
+      <strong>Що ще в плані</strong>
+      <span>Надійний EAN/GTIN для EVA, історія цін без обмеження архівом, запуск за розкладом і один моніторинг одразу по кількох магазинах.</span>
+    </div>
+    <form method="dialog" class="capabilities-footer"><button class="primary-button" type="submit">Зрозуміло</button></form>
+  </dialog>
+  <script src="batch.js"></script>
+  <script src="saved-lists.js"></script>
+  <script src="search-history.js"></script>
+  <script src="comparison.js"></script>
+  <script src="archive-tools.js"></script>
+  <script src="result-view.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

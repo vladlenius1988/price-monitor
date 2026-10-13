@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Функціонал Price Monitor 4.17.0</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#18202b;background:#f4f6fa}*{box-sizing:border-box}body{margin:0;padding:32px}main{max-width:1180px;margin:auto}.hero,.card{border:1px solid #e2e7ef;border-radius:18px;background:#fff;box-shadow:0 12px 34px rgba(31,40,55,.06)}.hero{padding:28px;margin-bottom:20px;background:radial-gradient(circle at top right,rgba(239,106,44,.12),transparent 28rem),#fff}.eyebrow{margin:0 0 8px;color:#ef6a2c;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}h1{margin:0 0 8px;font-size:34px}h2{margin:0 0 16px;font-size:21px}.subtitle{margin:0;color:#667085;line-height:1.55}.card{padding:24px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.feature{padding:14px;border:1px solid #e6eaf0;border-radius:12px;background:#fafbfc}.feature strong{display:block;margin-bottom:4px;color:#334155}.feature span{color:#687386;font-size:13px;line-height:1.45}.table-wrap{overflow-x:auto;border:1px solid #e2e7ef;border-radius:12px}table{width:100%;min-width:920px;border-collapse:collapse;font-size:13px}th,td{padding:13px 14px;border-bottom:1px solid #edf0f4;text-align:left;vertical-align:top}thead th{background:#f7f8fa;color:#667085;font-size:12px}tbody th{color:#253246}.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.yes{background:#e8f7ee;color:#157347}.partial{background:#fff6df;color:#8a5b00}.no{background:#f0f2f5;color:#657184}td small{display:block;margin-top:4px;color:#7b8492;line-height:1.4}.store-notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.store{padding:15px;border:1px solid #e6eaf0;border-radius:12px}.store h3{margin:0 0 7px;font-size:16px}.store p{margin:0;color:#667085;font-size:13px;line-height:1.5}.plans{border-color:#f3d4c4;background:#fff8f4}.plans ul{margin:0;padding-left:20px;color:#596579;line-height:1.65}.footer{color:#7b8492;font-size:12px;text-align:center}@media(max-width:800px){body{padding:16px}.grid,.store-notes{grid-template-columns:1fr}.hero,.card{padding:19px}h1{font-size:28px}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <p class="eyebrow">Довідник · версія 4.17.0 · 28 вересня 2026</p>
+    <h1>Що вміє Price Monitor</h1>
+    <p class="subtitle">Коротка карта всієї програми: загальні можливості, різниця між магазинами та чесний список того, чого ще немає.</p>
+  </section>
+
+  <section class="card">
+    <h2>Загальні можливості</h2>
+    <div class="grid">
+      <div class="feature"><strong>Одна або кілька марок</strong><span>Марки можна вводити через кому, крапку з комою або з нового рядка.</span></div>
+      <div class="feature"><strong>Лише доступні товари у новому пошуку</strong><span>Новий пошук залишає товари, які сайт дозволяє придбати під час перевірки. Відкритий архів явно позначає старі дані.</span></div>
+      <div class="feature"><strong>Дві ціни</strong><span>Окремо зберігаються поточна ціна зі знижкою та звичайна ціна без знижки.</span></div>
+      <div class="feature"><strong>Excel</strong><span>Назва, марка, ціни, посилання та додаткові поля магазину. Окремий лист містить час, запит, джерело й параметри перевірки.</span></div>
+      <div class="feature"><strong>Збережені списки</strong><span>Запити можна назвати, зберегти, дублювати, перейменувати й запускати одним натисканням. Разом із запитом запам’ятовуються потрібні галочки.</span></div>
+      <div class="feature"><strong>Історія пошуку</strong><span>12 останніх запитів на кожен магазин із режимами та швидким повтором.</span></div>
+      <div class="feature"><strong>Порівняння</strong><span>Нові, дешевші, дорожчі, без змін і зниклі товари відносно попереднього успішного пошуку.</span></div>
+      <div class="feature"><strong>Аналіз знижок</strong><span>Для кожного товару обчислюються сума економії та відсоток звичайної знижки; ці поля потрапляють і в Excel.</span></div>
+      <div class="feature"><strong>Фільтри й сортування</strong><span>Пошук у таблиці, діапазон ціни, відбір товарів зі знижкою або без неї та сортування за назвою, маркою, ціною чи розміром знижки.</span></div>
+      <div class="feature"><strong>Жива зведена інформація</strong><span>Для показаних рядків видно їхню кількість, число знижок, найнижчу ціну та найбільший відсоток знижки.</span></div>
+      <div class="feature"><strong>Копіювання в Excel</strong><span>Показані після всіх фільтрів рядки можна одним натисканням скопіювати й одразу вставити в Excel.</span></div>
+      <div class="feature"><strong>Надійність</strong><span>Зупинка з уже зібраними рядками, автозбереження довгих пошуків і резервна копія даних.</span></div>
+      <div class="feature"><strong>Архів результатів</strong><span>Повні успішні перевірки автоматично зберігаються. Їх можна відкрити без повторного запиту до магазину, відфільтрувати та експортувати.</span></div>
+      <div class="feature"><strong>Керування архівом</strong><span>Окрему або всі показані після фільтрів перевірки можна видалити з підтвердженням. Останнє видалення одразу скасовується однією кнопкою.</span></div>
+      <div class="feature"><strong>Історія ціни товару</strong><span>Кнопка під назвою відкриває графік і таблицю накопичених цін точної позиції. Магазин, варіант та продавець не змішуються.</span></div>
+      <div class="feature"><strong>Порівняння двох дат</strong><span>В архіві можна вибрати базову й пізнішу перевірки. Нові, зниклі та змінені позиції обчислюються без нового пошуку, база наступного моніторингу не змінюється.</span></div>
+      <div class="feature"><strong>Історія ціни в Excel</strong><span>Окремий файл містить усі збережені точки точної позиції, звичайні та промокодні ціни, різницю до попередньої точки й параметри товару зі штрихкодом.</span></div>
+      <div class="feature"><strong>Повтор з архіву</strong><span>Кнопка «Повторити пошук» запускає нову перевірку з магазином, запитом і галочками збереженого результату. Старий архів не перезаписується.</span></div>
+      <div class="feature"><strong>Зведений Excel за магазинами</strong><span>В архіві можна вибрати по одній перевірці щонайменше двох магазинів та зберегти спільну таблицю. Кожен рядок містить магазин, точну дату й запит; окремий лист пояснює джерела й скорочення.</span></div>
+      <div class="feature"><strong>Пошук перевірок в архіві</strong><span>Список збережених перевірок фільтрується за магазином, текстом запиту та діапазоном дат UTC. Кнопка «Очистити» скидає всі фільтри.</span></div>
+      <div class="feature"><strong>Показаний архів в Excel</strong><span>Усі перевірки, що залишилися після фільтрів, можна зберегти одним файлом. Дозволено кілька дат одного магазину; окремий лист містить джерела, режими та ознаки скорочення.</span></div>
+      <div class="feature"><strong>Зміни за магазинами</strong><span>Звіт знаходить найновішу сумісну пару повних перевірок або порівнює найранішу й найпізнішу сумісні перевірки за «вчора — сьогодні», 7, 30 днів чи власний діапазон UTC. Показує дати й кількість нових, дешевших, дорожчих, незмінних і зниклих позицій.</span></div>
+      <div class="feature"><strong>Деталі та фільтри змін</strong><span>Змінені товари можна переглянути за магазином, типом зміни, назвою, маркою чи штрихкодом. На екрані до 200 рядків, у файлі — усі.</span></div>
+      <div class="feature"><strong>Повний звіт змін в Excel</strong><span>Окремі листи містять змінені й зниклі з видачі товари та підсумок із датами джерел. Звіт формується без нового пошуку, архів та база порівняння не змінюються.</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Можливості за магазинами</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти / відтінки</th><th>EAN/GTIN</th><th>Продавці</th><th>Спеціальні дані</th></tr></thead>
+        <tbody>
+          <tr><th>EVA</th><td><span class="badge yes">Є</span></td><td><span class="badge yes">Є, за бажанням</span><small>доступні відтінки з власними цінами</small></td><td><span class="badge no">Ще немає</span><small>публічні дані містять лише внутрішній код і SKU</small></td><td><span class="badge no">Не потрібно</span></td><td>Звичайні та конфігуровані картки</td></tr>
+          <tr><th>VARUS</th><td><span class="badge yes">Є</span></td><td><span class="badge no">Немає</span></td><td><span class="badge no">Немає</span></td><td><span class="badge no">Не потрібно</span></td><td>Швидкий продуктовий каталог</td></tr>
+          <tr><th>MAKEUP</th><td><span class="badge yes">Є</span></td><td><span class="badge yes">Є, за бажанням</span><small>відтінки, об’єми, склади UA/EU</small></td><td><span class="badge yes">Є</span><small>збір кодів і прямий пошук за EAN/GTIN</small></td><td><span class="badge no">Не потрібно</span></td><td>EAN прив’язується лише до точного варіанта</td></tr>
+          <tr><th>Аврора</th><td><span class="badge partial">Без підказок</span></td><td><span class="badge partial">Частково</span><small>точний варіант або чесна позначка «в асортименті»</small></td><td><span class="badge no">Немає</span></td><td><span class="badge no">Не потрібно</span></td><td>Перевірка можливості купити</td></tr>
+          <tr><th>Notino</th><td><span class="badge yes">Є</span></td><td><span class="badge yes">Є, за бажанням</span><small>відтінки й об’єми з власними цінами</small></td><td><span class="badge no">Немає</span></td><td><span class="badge no">Не потрібно</span></td><td>Ціна за промокодом та умова окремо</td></tr>
+          <tr><th>Rozetka</th><td><span class="badge partial">Без підказок</span></td><td><span class="badge partial">Через пропозиції</span></td><td><span class="badge no">Немає</span></td><td><span class="badge yes">Є</span><small>кожна доступна пропозиція окремим рядком</small></td><td>Точний продавець, його ціни; відновлення довгого пошуку</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Важливі відмінності</h2>
+    <div class="store-notes">
+      <div class="store"><h3>Швидкий і детальний режими</h3><p>Для EVA, MAKEUP, Notino та Аврори звичайний пошук залишається швидким. Відтінки й варіанти вмикаються окремою галочкою, коли вони справді потрібні.</p></div>
+      <div class="store"><h3>Rozetka може працювати довго</h3><p>Перевірка всіх продавців відкриває багато пропозицій. Пошук можна зупинити, вже зібрані рядки залишаться, а після аварійного перезапуску спрацює відновлення.</p></div>
+      <div class="store"><h3>Промокод Notino — не звичайна знижка</h3><p>Промокодна ціна й умова показуються в окремих полях, щоб не плутати їх із безумовною акційною ціною.</p></div>
+      <div class="store"><h3>Порівняння потребує двох запусків</h3><p>Перший повністю успішний пошук створює базу. Наступний однаковий пошук показує зміни. Зупинений або помилковий результат базу не псує.</p></div>
+      <div class="store"><h3>Архів — не актуальні ціни</h3><p>Збережений результат стосується дати перевірки. Жовта позначка в програмі та окремий лист Excel не дають сплутати його з новим пошуком. Архів включений до резервної копії; старі копії залишаються сумісними.</p></div>
+      <div class="store"><h3>Історія накопичується з 4.10.0</h3><p>Зберігаються до 60 перевірок, до 5000 рядків / 8 МБ у кожній та до 100 000 рядків / 24 МБ загалом. Найстаріші поступово вилучаються, скорочені результати позначаються. Графік використовує лише збережені точки, без вигаданих минулих цін.</p></div>
+      <div class="store"><h3>Сумісні перевірки для порівняння</h3><p>Один магазин, однаковий список запитів і однакові режими. Порядок марок не важливий, але швидкий і детальний пошук не змішуються. Скорочені перевірки не порівнюються. «Зник» означає відсутність у пізнішій видачі, а не підтверджений нульовий залишок.</p></div>
+      <div class="store"><h3>Час та ціни в Excel історії</h3><p>Час перевірок виводиться в UTC з явним підписом; програма показує місцевий час комп’ютера. Ціни й різниці числові, штрихкод текстовий. Умовні промокодні ціни окремі й не змінюють графік поточної ціни.</p></div>
+      <div class="store"><h3>Спільний файл — не одночасний пошук</h3><p>У зведений Excel потрапляють вибрані збережені перевірки. За замовчуванням береться найновіша наявна перевірка кожного магазину; її можна змінити або вимкнути магазин. Дати й запити можуть бути різними, тому час і джерело вказані для кожного рядка. Нових запитів до магазинів ця дія не робить.</p></div>
+      <div class="store"><h3>Автоматичний звіт не вигадує наявність</h3><p>Для кожного магазину береться остання сумісна пара повних нескорочених перевірок однакового запиту та режимів. Якщо пари немає, магазин показується з поясненням і в зміни не потрапляє. «Зник із видачі» не означає нульового залишку сьогодні.</p></div>
+      <div class="store"><h3>Видалення архіву має одноразове скасування</h3><p>Програма показує точну кількість перевірок і рядків до видалення. Останню видалену групу можна відновити до закриття програми або наступного видалення. Списки, історія запитів і база нового порівняння не змінюються.</p></div>
+      <div class="store"><h3>Експорт фільтрів зберігає кожну дату</h3><p>Кнопка в архіві бере саме видимі після фільтрів перевірки. Один товар може повторюватися на різні дати — кожен рядок має власний час UTC, запит та ідентифікатор. Це архівні дані, а не новий пошук і не поточні залишки.</p></div>
+      <div class="store"><h3>Повна інструкція вже у програмі</h3><p>Кнопка «Інструкція» відкриває 12 розділів без інтернету й зовнішнього браузера. Є пошук за кількома словами та швидка навігація; окремий HTML-файл лишається для пересилання й друку.</p></div>
+    </div>
+  </section>
+
+  <section class="card plans">
+    <h2>Що ще не реалізовано</h2>
+    <ul>
+      <li>Надійний справжній EAN/GTIN для EVA — внутрішній код товару навмисно не видається за штрихкод.</li>
+      <li>Безлімітна довгострокова історія цін — зараз графік обмежений збереженим архівом.</li>
+      <li>Автоматичний запуск моніторингу за розкладом. Автоматичний <em>звіт із уже збережених перевірок</em> є, але сам по собі новий пошук не запускає.</li>
+      <li>Один спільний <em>новий пошук</em> одразу по кількох магазинах. Зведений Excel зі збережених перевірок уже є.</li>
+      <li>Штрихкоди для Notino, Аврори, VARUS і Rozetka.</li>
+    </ul>
+  </section>
+
+  <p class="footer">Price Monitor 4.17.0 · Документ можна відкрити подвійним натисканням у будь-якому сучасному браузері.</p>
+</main>
+</body>
+</html>

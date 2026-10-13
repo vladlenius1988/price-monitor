@@ -1,0 +1,39 @@
+appId: com.vladlen.pricemonitor.server
+productName: Price Monitor Server
+artifactName: Price Monitor Server Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-server
+files:
+  - license-server/app-main.js
+  - license-server/local-server.js
+  - license-server/server-core.js
+  - license-server/local-store.js
+  - license-server/crypto-node.js
+  - license-server/release-service.js
+  - license-server/telegram-notifier.js
+  - license-server/admin-preload.js
+  - license-server/admin.html
+  - license-server/admin.js
+  - license-access.js
+  - device-identity.js
+  - package.json
+extraResources:
+  - from: .license-private/license-private.pem
+    to: license-private.pem
+extraMetadata:
+  main: license-server/app-main.js
+  name: price-monitor-server
+  productName: Price Monitor Server
+  priceMonitorEdition: server
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null
+

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Price Monitor — сервер ліцензій</title>
+  <style>
+    :root { font-family: Inter, Segoe UI, sans-serif; color: #172033; background: #f3f5f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1320px; margin: 0 auto; padding: 28px 20px 60px; }
+    h1 { margin: 0 0 6px; } h2 { margin: 0 0 16px; } p { color: #60708b; }
+    section { background: white; border: 1px solid #dde3ec; border-radius: 16px; padding: 20px; margin-top: 18px; box-shadow: 0 10px 30px #20304a0c; }
+    form, .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+    label { display: grid; gap: 5px; color: #41506a; font-size: 13px; font-weight: 650; }
+    input, select, textarea, button { font: inherit; border-radius: 9px; border: 1px solid #cfd8e6; padding: 9px 11px; }
+    input { min-width: 160px; } button { cursor: pointer; background: #f5f7fa; font-weight: 700; }
+    button.primary { background: #ef5b2a; border-color: #ef5b2a; color: white; }
+    button.danger { color: #9d261f; } button:disabled { opacity: .5; cursor: wait; }
+    table { border-collapse: collapse; width: 100%; margin-top: 14px; font-size: 13px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #e8edf3; text-align: left; vertical-align: top; }
+    th { color: #52617a; } code { font-family: Consolas, monospace; }
+    .notice { padding: 12px; border-radius: 10px; background: #edf8f1; color: #21613e; margin-top: 12px; white-space: pre-wrap; }
+    .notice.error { background: #fff0ef; color: #8f2019; }
+    .device { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+    .muted { color: #7a879c; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 12px; margin-top: 18px; }
+    .summary article { background: #fff; border: 1px solid #dde3ec; border-radius: 14px; padding: 16px; }
+    .summary strong { display: block; font-size: 28px; margin-bottom: 3px; }
+    .store-options { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+    .store-options label { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #d8e0eb; border-radius: 9px; }
+    .store-options input { min-width: 0; }
+    .license-rules { display: grid; gap: 6px; min-width: 230px; }
+    .license-rules input { min-width: 80px; width: 100%; }
+    .license-stores { display: flex; flex-wrap: wrap; gap: 4px; max-width: 360px; }
+    .license-stores label { display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; }
+    .license-stores input { min-width: 0; }
+    .events { max-height: 300px; overflow: auto; }
+    .token-row[hidden] { display: none; }
+    .wide { min-width: min(560px, 90vw); }
+    .stack { display: grid; gap: 12px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .table-wrap { overflow-x: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Сервер ліцензій Price Monitor</h1>
+    <p>Панель власника доступна лише на цьому комп’ютері. Публічний клієнтський API відокремлено від керування й приватного ключа.</p>
+
+    <div class="summary">
+      <article><strong id="total-licenses">0</strong><span class="muted">ліцензій</span></article>
+      <article><strong id="active-licenses">0</strong><span class="muted">активних</span></article>
+      <article><strong id="active-devices">0</strong><span class="muted">пристроїв</span></article>
+      <article><strong id="event-count">0</strong><span class="muted">подій у журналі</span></article>
+    </div>
+
+    <section>
+      <div class="toolbar">
+        <label class="token-row">Токен адміністратора<input id="admin-token" autocomplete="off"></label>
+        <button id="refresh" type="button">Оновити дані</button>
+        <span class="muted" id="server-status">Перевіряю сервер…</span>
+      </div>
+      <div id="notice" class="notice" hidden></div>
+    </section>
+
+    <section>
+      <h2>Нова ліцензія</h2>
+      <form id="create-license">
+        <label>Клієнт<input name="customerName" required placeholder="Наприклад, PROSTOR"></label>
+        <label>Оплачено до<input name="paidUntil" type="date" required></label>
+        <label>Комп’ютерів<input name="maxDevices" type="number" min="1" max="10000" value="10" required></label>
+        <label>Автономних днів<input name="leaseDays" type="number" min="1" max="90" value="14" required></label>
+        <label>Початковий стан<select name="status"><option value="pending">Очікує підтвердження</option><option value="active">Одразу активна</option></select></label>
+        <div class="store-options" id="create-stores"></div>
+        <button class="primary" type="submit">Створити й видати код</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Клієнти й пристрої</h2>
+      <div id="licenses" class="muted table-wrap">Ще не завантажено.</div>
+    </section>
+
+    <section>
+      <h2>Оновлення клієнтів</h2>
+      <p>Оберіть готовий EXE-інсталятор. Сервер скопіює його, порахує контрольну суму й підпише маніфест приватним ключем.</p>
+      <form id="publish-release">
+        <label>Версія<input name="version" required placeholder="4.21.1"></label>
+        <label>Канал<input name="channel" value="licensed" required></label>
+        <label class="wide">Інсталятор<input id="release-source" name="sourcePath" readonly required placeholder="Оберіть EXE-файл"></label>
+        <button id="select-release" type="button">Обрати файл</button>
+        <label>Обов’язкове<select name="required"><option value="false">Ні</option><option value="true">Так</option></select></label>
+        <label class="wide">Що змінило<textarea name="notes" rows="3" placeholder="Короткий опис для клієнта"></textarea></label>
+        <button class="primary" type="submit">Опублікувати оновлення</button>
+      </form>
+      <div id="releases" class="muted table-wrap">Оновлень ще немає.</div>
+    </section>
+
+    <section>
+      <h2>Сповіщення в Telegram</h2>
+      <p>Необов’язково. Токен і Chat ID зберігаються лише на серверному комп’ютері. Запити користувачів не надсилаються.</p>
+      <form id="telegram-settings">
+        <label>Увімкнути<select name="enabled"><option value="false">Ні</option><option value="true">Так</option></select></label>
+        <label class="wide">Bot token<input name="botToken" autocomplete="off" placeholder="Залиште порожнім, щоб не змінювати"></label>
+        <label>Chat ID<input name="chatId" autocomplete="off" placeholder="Наприклад, 123456789"></label>
+        <button class="primary" type="submit">Зберегти</button>
+        <button id="test-telegram" type="button">Надіслати тест</button>
+      </form>
+      <p id="telegram-status" class="muted"></p>
+    </section>
+
+    <section>
+      <h2>Останні події</h2>
+      <div id="events" class="muted events">Ще не завантажено.</div>
+    </section>
+  </main>
+  <script src="/admin.js"></script>
+</body>
+</html>
