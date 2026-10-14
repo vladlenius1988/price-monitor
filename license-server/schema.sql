@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS licenses (
   customer_name TEXT NOT NULL,
   activation_hash TEXT NOT NULL UNIQUE,
   activation_hint TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'revoked')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending', 'active', 'suspended', 'revoked')),
   paid_until TEXT NOT NULL,
   max_devices INTEGER NOT NULL DEFAULT 1 CHECK (max_devices >= 1),
   lease_days INTEGER NOT NULL DEFAULT 14 CHECK (lease_days BETWEEN 1 AND 90),

@@ -8,7 +8,7 @@
     "start": "electron .",
     "start:demo": "set PRICE_MONITOR_EDITION=demo&& electron .",
     "start:licensed": "set PRICE_MONITOR_EDITION=licensed&& electron .",
-    "test": "node --test scraper.test.js demo-access.test.js license-access.test.js license-server/server-core.test.js license-server/local-server.test.js license-server/telegram-notifier.test.js license-server/worker-crypto.test.mjs",
+    "test": "node --test scraper.test.js demo-access.test.js license-access.test.js license-server/server-core.test.js license-server/local-server.test.js license-server/telegram-notifier.test.js license-server/worker-crypto.test.mjs license-server/schema.test.js",
     "license-server:local": "node license-server/local-server.js",
     "start:server": "electron license-server/app-main.js",
     "dist": "electron-builder",
@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "electron": "^43.4.1",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "wrangler": "^4.151.0"
   },
   "dependencies": {
     "write-excel-file": "^4.1.1"
@@ -59,7 +60,9 @@
     "npmRebuild": false,
     "win": {
       "forceCodeSigning": false,
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "publish": null
   }

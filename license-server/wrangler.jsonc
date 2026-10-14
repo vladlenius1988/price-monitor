@@ -1,0 +1,24 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "price-monitor-license",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "env": {
+    "staging": {
+      "name": "price-monitor-license-staging",
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "staging"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "price-monitor-staging",
+          "database_id": "3d621aaf-9570-4d25-b0b7-5a6b86795aa9",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}

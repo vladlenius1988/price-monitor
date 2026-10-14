@@ -37,4 +37,3 @@ varus_scripts_dump.json
 !*.example
 license-server/data/
 license-server/.dev.vars
-license-server/wrangler.jsonc
