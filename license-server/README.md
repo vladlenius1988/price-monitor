@@ -30,6 +30,36 @@ npm run license-server:local
 - маніфести оновлень підписуються тим самим Ed25519-ключем, а клієнт додатково перевіряє SHA-256 файла;
 - Telegram вимкнений, доки власник сам не збереже Bot token і Chat ID.
 
-## Майбутнє розгортання
+## Тестовий сервер Cloudflare
 
-Прямий HTTP-доступ через домашню IP-адресу призначений тільки для контрольного експерименту. Перед продажами локальне JSON-сховище буде замінене хмарним адаптером, HTTP — на HTTPS, а тестовий ключ — окремим бойовим ключем у захищеному секреті.
+Тестовий контур уже розгорнуто окремо від локального сервера:
+
+- Worker: `price-monitor-license-staging`;
+- HTTPS API: `https://price-monitor-license-staging.vladlenius.workers.dev`;
+- база: Cloudflare D1 `price-monitor-staging`;
+- середовище: `staging`;
+- секрети `LICENSE_PRIVATE_KEY_B64` та `ADMIN_TOKEN` зберігаються тільки у Cloudflare і ніколи не додаються до Git.
+
+Перевірка доступності:
+
+```powershell
+Invoke-RestMethod https://price-monitor-license-staging.vladlenius.workers.dev/health
+```
+
+Застосування нових міграцій із каталогу `license-server`:
+
+```powershell
+npx wrangler d1 migrations apply price-monitor-staging --remote --env staging --config wrangler.jsonc
+```
+
+Публікація перевіреної серверної версії з каталогу `license-server`:
+
+```powershell
+npx wrangler deploy --env staging --config wrangler.jsonc
+```
+
+Перед публікацією обов'язково виконати `npm test` у корені проєкту. Адресу тестового API ще не слід вбудовувати у клієнтський реліз: спочатку треба підключити до хмари панель власника, реалізувати хмарну видачу оновлень і провести окремий тест на другому комп'ютері.
+
+## Подальше бойове розгортання
+
+Поточний `staging` використовує тестовий ключ і призначений для перевірок. Перед продажами потрібні окремий бойовий Worker, окрема D1-база, новий приватний ключ, резервне копіювання даних, журнал помилок і контрольований процес оновлення клієнтів. Домашня IP-адреса для цього більше не потрібна.
