@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.21.0');
+  assert.equal(packageJson.version, '4.22.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1050,6 +1050,20 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
   assert.deepEqual(packageJson.build.win.target, ['nsis']);
+});
+
+test('cloud admin and cloud client stay isolated and use the HTTPS staging server', () => {
+  const adminConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.cloud-admin.yml'), 'utf8');
+  const clientConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.cloud-client.yml'), 'utf8');
+  const adminPreload = fs.readFileSync(path.join(__dirname, 'license-server', 'admin-preload.js'), 'utf8');
+  const adminRenderer = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
+  assert.match(adminConfig, /com\.vladlen\.pricemonitor\.cloudadmin/);
+  assert.match(clientConfig, /com\.vladlen\.retailpricemonitor\.cloudtest/);
+  assert.match(adminConfig, /https:\/\/price-monitor-license-staging\.vladlenius\.workers\.dev/);
+  assert.match(clientConfig, /https:\/\/price-monitor-license-staging\.vladlenius\.workers\.dev/);
+  assert.match(clientConfig, /priceMonitorBundledLicense: false/);
+  assert.match(adminPreload, /owner:api-request/);
+  assert.match(adminRenderer, /priceMonitorOwner\.apiRequest/);
 });
 
 test('loads saved lists before the renderer and exposes their Ukrainian controls', () => {

@@ -32,8 +32,8 @@ const releases = document.getElementById('releases');
 const telegramForm = document.getElementById('telegram-settings');
 const telegramStatus = document.getElementById('telegram-status');
 const testTelegramButton = document.getElementById('test-telegram');
+let ownerMode = 'browser';
 
-initializeToken();
 renderStoreCheckboxes(createStores, STORE_IDS, 'create-store');
 setDefaultPaidUntil();
 
@@ -44,10 +44,27 @@ selectReleaseButton.addEventListener('click', () => selectReleaseInstaller().cat
 publishReleaseForm.addEventListener('submit', (event) => publishRelease(event).catch(showError));
 telegramForm.addEventListener('submit', (event) => saveTelegram(event).catch(showError));
 testTelegramButton.addEventListener('click', () => testTelegram().catch(showError));
-refresh().catch(showError);
+initializeOwner().catch(showError);
 setInterval(() => {
   if (!document.activeElement?.matches('input,select,textarea')) refresh({ quiet: true }).catch(() => {});
 }, 5000);
+
+async function initializeOwner() {
+  const environment = await window.priceMonitorOwner?.environment?.().catch(() => null);
+  if (environment?.secureProxy) {
+    ownerMode = environment.mode || 'native';
+    tokenRow.hidden = true;
+  } else {
+    initializeToken();
+  }
+  if (ownerMode === 'cloud') {
+    document.getElementById('owner-title').textContent = 'Хмарне керування Price Monitor';
+    document.getElementById('owner-description').textContent = 'Ліцензії та пристрої зберігаються у Cloudflare. Адміністративний токен залишається на цьому комп’ютері.';
+    document.getElementById('updates-section').hidden = true;
+    document.getElementById('telegram-section').hidden = true;
+  }
+  await refresh();
+}
 
 function initializeToken() {
   const fragment = new URLSearchParams(location.hash.slice(1));
@@ -64,6 +81,15 @@ function initializeToken() {
 }
 
 async function api(path, options = {}) {
+  if (window.priceMonitorOwner?.apiRequest) {
+    const result = await window.priceMonitorOwner.apiRequest({
+      path,
+      method: options.method || 'GET',
+      body: options.body || '',
+    });
+    if (!result?.ok) throw new Error(result?.body?.error || `HTTP ${result?.status || 0}`);
+    return result.body || {};
+  }
   const response = await fetch(path, {
     ...options,
     headers: {
@@ -112,7 +138,9 @@ async function refresh({ quiet = false } = {}) {
     renderEvents(data.events || []);
     renderReleases(data.releases || []);
     renderTelegramSettings(data.settings || {});
-    serverStatus.textContent = `Сервер працює · клієнтський порт ${data.publicServer?.port || '—'} · ${new Date().toLocaleTimeString('uk-UA')}`;
+    serverStatus.textContent = ownerMode === 'cloud'
+      ? `Хмарний сервер працює · ${new Date().toLocaleTimeString('uk-UA')}`
+      : `Сервер працює · клієнтський порт ${data.publicServer?.port || '—'} · ${new Date().toLocaleTimeString('uk-UA')}`;
   } finally {
     if (!quiet) refreshButton.disabled = false;
   }

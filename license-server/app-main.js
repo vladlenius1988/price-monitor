@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { startLocalLicenseServer } = require('./local-server');
+const { createOwnerApiClient } = require('./owner-api');
 
 const APP_NAME = 'Price Monitor Server';
 const DEFAULT_PORT = 8787;
@@ -17,6 +18,7 @@ let mainWindow = null;
 let serverInstance = null;
 let shuttingDown = false;
 let notificationTimer = null;
+let ownerApiClient = null;
 
 app.setName(APP_NAME);
 app.setPath('userData', TEST_HIDDEN && argumentValue('--test-user-data=')
@@ -53,6 +55,7 @@ async function startServerAndWindow() {
     dataPath: path.join(dataDirectory, 'license-data.json'),
     privateKeyPath: privateKeyPath(),
   });
+  ownerApiClient = createOwnerApiClient({ apiBaseUrl: serverInstance.adminBaseUrl, adminToken });
 
   mainWindow = new BrowserWindow({
     show: !TEST_HIDDEN,
@@ -74,7 +77,7 @@ async function startServerAndWindow() {
     if (/^https:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  await mainWindow.loadURL(`${serverInstance.adminUrl}#token=${encodeURIComponent(adminToken)}`);
+  await mainWindow.loadURL(serverInstance.adminUrl);
   serverInstance.telegram.sweep().catch(() => {});
   notificationTimer = setInterval(() => serverInstance?.telegram?.sweep().catch(() => {}), 60 * 60 * 1000);
   notificationTimer.unref?.();
@@ -87,6 +90,16 @@ ipcMain.handle('server:select-installer', async () => {
     filters: [{ name: 'Інсталятор Windows', extensions: ['exe'] }],
   });
   return result.canceled || !result.filePaths[0] ? { canceled: true, filePath: '' } : { canceled: false, filePath: result.filePaths[0] };
+});
+
+ipcMain.handle('owner:environment', () => ({ mode: 'local', secureProxy: true, apiBaseUrl: serverInstance?.adminBaseUrl || '' }));
+ipcMain.handle('owner:api-request', async (_event, request) => {
+  if (!ownerApiClient) return { ok: false, status: 0, body: { error: 'server_unavailable' } };
+  try {
+    return await ownerApiClient.request(request);
+  } catch (_error) {
+    return { ok: false, status: 400, body: { error: 'request_invalid' } };
+  }
 });
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();

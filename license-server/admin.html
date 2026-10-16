@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Price Monitor — сервер ліцензій</title>
+  <title>Price Monitor — керування ліцензіями</title>
   <style>
     :root { font-family: Inter, Segoe UI, sans-serif; color: #172033; background: #f3f5f8; }
     * { box-sizing: border-box; }
@@ -44,8 +44,8 @@
 </head>
 <body>
   <main>
-    <h1>Сервер ліцензій Price Monitor</h1>
-    <p>Панель власника доступна лише на цьому комп’ютері. Публічний клієнтський API відокремлено від керування й приватного ключа.</p>
+    <h1 id="owner-title">Сервер ліцензій Price Monitor</h1>
+    <p id="owner-description">Панель власника доступна лише на цьому комп’ютері. Публічний клієнтський API відокремлено від керування й приватного ключа.</p>
 
     <div class="summary">
       <article><strong id="total-licenses">0</strong><span class="muted">ліцензій</span></article>
@@ -81,7 +81,7 @@
       <div id="licenses" class="muted table-wrap">Ще не завантажено.</div>
     </section>
 
-    <section>
+    <section id="updates-section">
       <h2>Оновлення клієнтів</h2>
       <p>Оберіть готовий EXE-інсталятор. Сервер скопіює його, порахує контрольну суму й підпише маніфест приватним ключем.</p>
       <form id="publish-release">
@@ -96,7 +96,7 @@
       <div id="releases" class="muted table-wrap">Оновлень ще немає.</div>
     </section>
 
-    <section>
+    <section id="telegram-section">
       <h2>Сповіщення в Telegram</h2>
       <p>Необов’язково. Токен і Chat ID зберігаються лише на серверному комп’ютері. Запити користувачів не надсилаються.</p>
       <form id="telegram-settings">
@@ -114,6 +114,6 @@
       <div id="events" class="muted events">Ще не завантажено.</div>
     </section>
   </main>
-  <script src="/admin.js"></script>
+  <script src="./admin.js"></script>
 </body>
 </html>

@@ -1,0 +1,29 @@
+appId: com.vladlen.pricemonitor.cloudadmin
+productName: Price Monitor Cloud Admin
+artifactName: Price Monitor Cloud Admin Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-cloud-admin
+files:
+  - license-server/cloud-admin-main.js
+  - license-server/owner-api.js
+  - license-server/admin-preload.js
+  - license-server/admin.html
+  - license-server/admin.js
+  - package.json
+extraMetadata:
+  main: license-server/cloud-admin-main.js
+  name: price-monitor-cloud-admin
+  productName: Price Monitor Cloud Admin
+  priceMonitorEdition: cloud-admin
+  priceMonitorAdminApiUrl: https://price-monitor-license-staging.vladlenius.workers.dev
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null
