@@ -119,8 +119,8 @@ async function createLicense(event) {
       stores,
     }),
   });
-  showNotice(`Код активації створено. Він показується лише зараз:\n\n${body.activationCode}`);
-  await navigator.clipboard?.writeText(body.activationCode).catch(() => {});
+  const copied = await copyActivationCode(body.activationCode);
+  showActivationCode(body.activationCode, { copied, regenerated: false });
   createForm.reset();
   createForm.elements.maxDevices.value = 10;
   createForm.elements.leaseDays.value = 14;
@@ -173,6 +173,7 @@ function renderLicenses(items) {
       <td>${renderDevices(item)}</td>
       <td>
         <button data-action="save" data-id="${escapeHtml(item.id)}">Зберегти правила</button>
+        <button data-action="new-code" data-id="${escapeHtml(item.id)}">Новий код</button>
         <button data-action="status" data-status="active" data-id="${escapeHtml(item.id)}">Підтвердити</button>
         <button data-action="status" data-status="suspended" data-id="${escapeHtml(item.id)}">Призупинити</button>
         <button class="danger" data-action="status" data-status="revoked" data-id="${escapeHtml(item.id)}">Заблокувати</button>
@@ -215,6 +216,12 @@ async function handleLicenseAction(event) {
         }),
       });
       showNotice('Налаштування ліцензії збережено. Клієнт отримає їх під час наступної онлайн-перевірки.');
+    } else if (button.dataset.action === 'new-code') {
+      const confirmed = window.confirm('Випустити новий код? Попередній код цієї ліцензії одразу перестане працювати.');
+      if (!confirmed) return;
+      const body = await api(`/admin/api/licenses/${encodeURIComponent(id)}/activation-code`, { method: 'POST' });
+      const copied = await copyActivationCode(body.activationCode);
+      showActivationCode(body.activationCode, { copied, regenerated: true });
     } else if (button.dataset.action === 'status') {
       await api(`/admin/api/licenses/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.status }) });
     } else if (button.dataset.action === 'remove-device') {
@@ -328,6 +335,45 @@ function showNotice(message) {
   notice.hidden = false;
   notice.classList.remove('error');
   notice.textContent = message;
+}
+
+function showActivationCode(code, { copied = false, regenerated = false } = {}) {
+  notice.hidden = false;
+  notice.classList.remove('error');
+  notice.replaceChildren();
+  const title = document.createElement('strong');
+  title.textContent = regenerated ? 'Новий код активації створено.' : 'Код активації створено.';
+  const description = document.createElement('span');
+  description.textContent = ' Він показується лише зараз.';
+  const codeElement = document.createElement('code');
+  codeElement.textContent = String(code || '');
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.textContent = copied ? 'Скопійовано' : 'Скопіювати код';
+  const copyStatus = document.createElement('span');
+  copyStatus.className = 'muted';
+  copyStatus.textContent = copied ? ' Код уже у буфері обміну.' : ' Натисніть кнопку перед переходом до клієнта.';
+  copyButton.addEventListener('click', async () => {
+    const success = await copyActivationCode(code);
+    copyButton.textContent = success ? 'Скопійовано' : 'Не вдалося скопіювати';
+    copyStatus.textContent = success ? ' Код у буфері обміну.' : ' Виділіть код вище та скопіюйте вручну.';
+  });
+  notice.append(title, description, codeElement, copyButton, copyStatus);
+}
+
+async function copyActivationCode(code) {
+  try {
+    const result = await window.priceMonitorOwner?.copyText?.(code);
+    if (result?.copied) return true;
+  } catch (_error) {
+    // Нижче лишається браузерний запасний варіант.
+  }
+  try {
+    await navigator.clipboard?.writeText(code);
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function showError(error) {

@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.22.1');
+  assert.equal(packageJson.version, '4.22.2');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1063,7 +1063,10 @@ test('cloud admin and cloud client stay isolated and use the HTTPS staging serve
   assert.match(clientConfig, /https:\/\/price-monitor-license-staging\.vladlenius\.workers\.dev/);
   assert.match(clientConfig, /priceMonitorBundledLicense: false/);
   assert.match(adminPreload, /owner:api-request/);
+  assert.match(adminPreload, /owner:copy-text/);
   assert.match(adminRenderer, /priceMonitorOwner\.apiRequest/);
+  assert.match(adminRenderer, /data-action="new-code"/);
+  assert.match(adminRenderer, /function showActivationCode\(/);
 });
 
 test('loads saved lists before the renderer and exposes their Ukrainian controls', () => {

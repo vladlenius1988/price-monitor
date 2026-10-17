@@ -43,6 +43,29 @@ test('local server creates, activates, refreshes and manages a real client licen
     assert.match(created.activationCode, /^PM(?:-[A-Z0-9]{5}){8}$/);
     assert.deepEqual(created.license.stores, ['eva', 'makeup']);
 
+    const regenerated = await adminRequest(
+      instance.adminBaseUrl,
+      `/admin/api/licenses/${encodeURIComponent(created.license.id)}/activation-code`,
+      { method: 'POST' },
+    );
+    assert.match(regenerated.activationCode, /^PM(?:-[A-Z0-9]{5}){8}$/);
+    assert.notEqual(regenerated.activationCode, created.activationCode);
+    assert.equal(regenerated.license.activationHint, regenerated.activationCode.slice(-5));
+
+    const oldCodeResponse = await fetch(`${instance.baseUrl}/v1/licenses/activate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        activationCode: created.activationCode,
+        deviceId: DEVICE_ID,
+        installationId: 'old-code-test',
+        appVersion: '4.22.2',
+        edition: 'licensed',
+      }),
+    });
+    assert.equal(oldCodeResponse.status, 404);
+    assert.equal((await oldCodeResponse.json()).error, 'activation_code_invalid');
+
     const accessStore = new LicensedAccessStore({
       edition: 'licensed',
       licensePath: path.join(directory, 'client', 'license.json'),
@@ -52,7 +75,7 @@ test('local server creates, activates, refreshes and manages a real client licen
       appVersion: '4.21.0',
       deviceIdProvider: () => DEVICE_ID,
     });
-    const activated = await accessStore.activateOnline(created.activationCode);
+    const activated = await accessStore.activateOnline(regenerated.activationCode);
     assert.equal(activated.updated, true);
     assert.equal(activated.status.allowed, true);
     assert.deepEqual(activated.status.stores, ['eva', 'makeup']);

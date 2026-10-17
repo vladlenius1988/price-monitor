@@ -42,13 +42,16 @@ export class D1LicenseStore {
     const record = { ...current, ...patch };
     await this.db.prepare(`
       UPDATE licenses SET
-        customer_name = ?2, status = ?3, paid_until = ?4, max_devices = ?5,
-        lease_days = ?6, stores_json = ?7, features_json = ?8,
-        update_channel = ?9, updated_at = ?10
+        customer_name = ?2, activation_hash = ?3, activation_hint = ?4,
+        status = ?5, paid_until = ?6, max_devices = ?7,
+        lease_days = ?8, stores_json = ?9, features_json = ?10,
+        update_channel = ?11, updated_at = ?12
       WHERE id = ?1
     `).bind(
       id,
       record.customerName,
+      record.activationHash,
+      record.activationHint,
       record.status,
       record.paidUntil,
       record.maxDevices,

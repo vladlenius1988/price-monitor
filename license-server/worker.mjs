@@ -45,6 +45,20 @@ export default {
           });
           return json(201, { license: sanitizeLicense(record), activationCode });
         }
+        const activationCodeMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)\/activation-code$/);
+        if (activationCodeMatch && request.method === 'POST') {
+          const id = decodeURIComponent(activationCodeMatch[1]);
+          const current = await store.findLicenseById(id);
+          if (!current) throw new LicenseServiceError('license_not_found', 404);
+          const activationCode = createActivationCode();
+          const activationHash = await cryptoProvider.hashActivationCode(activationCode.replace(/[^A-Z0-9]/g, ''));
+          const updated = await store.updateLicense(id, {
+            activationHash,
+            activationHint: activationCode.slice(-5),
+            updatedAt: new Date().toISOString(),
+          });
+          return json(200, { license: sanitizeLicense(updated), activationCode });
+        }
         const licenseMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)$/);
         if (licenseMatch && request.method === 'PATCH') {
           const id = decodeURIComponent(licenseMatch[1]);

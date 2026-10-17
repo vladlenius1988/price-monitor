@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -65,6 +65,11 @@ function createWindow() {
 }
 
 ipcMain.handle('owner:environment', () => ({ mode: 'cloud', secureProxy: true, apiBaseUrl: API_BASE_URL }));
+ipcMain.handle('owner:copy-text', (_event, value) => {
+  const text = String(value || '').slice(0, 10000);
+  clipboard.writeText(text);
+  return { copied: clipboard.readText() === text };
+});
 ipcMain.handle('owner:api-request', async (_event, request) => {
   if (!ownerApiClient) return { ok: false, status: 0, body: { error: 'server_unavailable' } };
   try {

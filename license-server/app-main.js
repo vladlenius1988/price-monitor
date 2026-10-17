@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, shell, ipcMain } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -93,6 +93,11 @@ ipcMain.handle('server:select-installer', async () => {
 });
 
 ipcMain.handle('owner:environment', () => ({ mode: 'local', secureProxy: true, apiBaseUrl: serverInstance?.adminBaseUrl || '' }));
+ipcMain.handle('owner:copy-text', (_event, value) => {
+  const text = String(value || '').slice(0, 10000);
+  clipboard.writeText(text);
+  return { copied: clipboard.readText() === text };
+});
 ipcMain.handle('owner:api-request', async (_event, request) => {
   if (!ownerApiClient) return { ok: false, status: 0, body: { error: 'server_unavailable' } };
   try {

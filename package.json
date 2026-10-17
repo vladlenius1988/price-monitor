@@ -1,6 +1,6 @@
 {
   "name": "retail-price-monitor",
-  "version": "4.22.1",
+  "version": "4.22.2",
   "priceMonitorEdition": "full",
   "description": "Моніторинг цін за торговими марками в EVA, VARUS, MAKEUP, Аврорі, Notino та Rozetka",
   "main": "main.js",
@@ -18,7 +18,8 @@
     "dist:local-client": "electron-builder --config electron-builder.local-client.yml",
     "dist:remote-client": "electron-builder --config electron-builder.remote-client.yml",
     "dist:cloud-admin": "electron-builder --config electron-builder.cloud-admin.yml",
-    "dist:cloud-client": "electron-builder --config electron-builder.cloud-client.yml"
+    "dist:cloud-client": "electron-builder --config electron-builder.cloud-client.yml",
+    "cloud:deploy:staging": "wrangler deploy --config license-server/wrangler.jsonc --env staging"
   },
   "devDependencies": {
     "electron": "^43.4.1",

@@ -23,3 +23,11 @@ for (const schemaFile of schemaFiles) {
     assert.deepEqual(statuses, expectedLicenseStatuses);
   });
 }
+
+test('D1 license updates persist regenerated activation codes', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'd1-store.mjs'), 'utf8');
+  assert.match(source, /activation_hash = \?3/);
+  assert.match(source, /activation_hint = \?4/);
+  assert.match(source, /record\.activationHash/);
+  assert.match(source, /record\.activationHint/);
+});
