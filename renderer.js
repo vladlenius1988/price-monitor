@@ -323,6 +323,7 @@ savedListName.addEventListener('keydown', (event) => {
 
 renderSavedLists();
 renderSearchHistory();
+initializeAppInfo().catch(() => {});
 
 if (parserAvailable) {
   parserApi.onProgress((progress) => {
@@ -342,6 +343,14 @@ if (parserAvailable) {
   restoreRecovery().catch(() => {});
 } else {
   showLaunchHint();
+}
+
+async function initializeAppInfo() {
+  const info = await parserApi?.getAppInfo?.();
+  const version = String(info?.version || '').trim();
+  document.querySelectorAll('[data-app-version]').forEach((element) => {
+    element.textContent = version || 'поточної версії';
+  });
 }
 
 async function initializeAccess() {
@@ -410,6 +419,13 @@ async function refreshLicenseNow() {
   try {
     const result = await parserApi.refreshAccess();
     if (result?.status) updateAccessUi(result.status);
+    if (!result?.checked && ['license_missing', 'license_invalid'].includes(result?.reason)) {
+      const probe = await parserApi.probeLicenseServer?.();
+      licenseRefreshStatus.textContent = probe?.available
+        ? 'Сервер доступний. Для першого запуску введіть код активації.'
+        : 'Сервер недоступний. Чинний автономний допуск збережено.';
+      return;
+    }
     licenseRefreshStatus.textContent = result?.updated
       ? 'Ліцензію та набір магазинів оновлено.'
       : result?.reason === 'server_unavailable'

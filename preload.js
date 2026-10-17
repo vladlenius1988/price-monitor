@@ -1,9 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('priceParser', {
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
   listStores: () => ipcRenderer.invoke('stores:list'),
   getAccessStatus: () => ipcRenderer.invoke('access:status'),
   refreshAccess: () => ipcRenderer.invoke('access:refresh'),
+  probeLicenseServer: () => ipcRenderer.invoke('access:probe-server'),
   activateLicense: (activationCode) => ipcRenderer.invoke('access:activate', { activationCode }),
   exportLicenseRequest: () => ipcRenderer.invoke('access:export-request'),
   importLicense: () => ipcRenderer.invoke('access:import-license'),

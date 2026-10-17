@@ -142,6 +142,27 @@ class LicensedAccessStore {
     return !Number.isFinite(lastAttempt) || this.nowMs() - lastAttempt >= ONLINE_INTERVAL_MS;
   }
 
+  async probeServer() {
+    if (this.edition !== 'licensed' || !this.serverUrl) {
+      return { checked: false, available: false, reason: 'not_configured' };
+    }
+    if (typeof this.fetchFn !== 'function') {
+      return { checked: false, available: false, reason: 'fetch_unavailable' };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await this.fetchFn(`${this.serverUrl}/health`, { signal: controller.signal });
+      const body = await safeJson(response);
+      const available = Boolean(response?.ok && body?.ok === true);
+      return { checked: true, available, reason: available ? '' : 'server_unavailable' };
+    } catch (_error) {
+      return { checked: true, available: false, reason: 'server_unavailable' };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   getActivationRequest() {
     if (this.edition !== 'licensed') throw new Error('license_invalid');
     this.ensureState();

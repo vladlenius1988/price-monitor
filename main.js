@@ -141,6 +141,10 @@ function createMainWindow() {
 }
 
 function registerIpcHandlers() {
+  ipcMain.handle('app:info', () => ({
+    version: app.getVersion(),
+    name: editionSettings.name,
+  }));
   ipcMain.handle('stores:list', () => STORES);
 
   ipcMain.handle('access:status', () => accessStore.getStatus());
@@ -149,6 +153,12 @@ function registerIpcHandlers() {
       return { checked: false, updated: false, reason: 'not_configured', status: accessStore.getStatus() };
     }
     return accessStore.refreshOnline();
+  });
+  ipcMain.handle('access:probe-server', async () => {
+    if (typeof accessStore.probeServer !== 'function') {
+      return { checked: false, available: false, reason: 'not_configured' };
+    }
+    return accessStore.probeServer();
   });
   ipcMain.handle('access:activate', async (_event, payload = {}) => {
     if (typeof accessStore.activateOnline !== 'function') {

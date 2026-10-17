@@ -162,6 +162,31 @@ test('server-ready refresh accepts only a newly signed matching license', async 
   });
 });
 
+test('server probe works before the first license is activated', async () => {
+  await withLicensedStore(async ({ create }) => {
+    const fetchFn = async (url, request) => {
+      assert.equal(url, 'https://license.example.test/health');
+      assert.equal(Boolean(request.signal), true);
+      return { ok: true, json: async () => ({ ok: true, service: 'price-monitor-license' }) };
+    };
+    const store = create({ bundledLicensePath: '', serverUrl: 'https://license.example.test', fetchFn });
+    assert.equal(store.getStatus().blockedReason, 'license_missing');
+    assert.deepEqual(await store.probeServer(), { checked: true, available: true, reason: '' });
+  });
+});
+
+test('server probe reports an unavailable endpoint without changing local access', async () => {
+  await withLicensedStore(async ({ create }) => {
+    const store = create({
+      serverUrl: 'https://license.example.test',
+      fetchFn: async () => { throw new Error('network_down'); },
+    });
+    const before = store.getStatus();
+    assert.deepEqual(await store.probeServer(), { checked: true, available: false, reason: 'server_unavailable' });
+    assert.equal(store.getStatus().allowed, before.allowed);
+  });
+});
+
 test('universal licensed build activates a clean computer without a bundled license', async () => {
   await withLicensedStore(async ({ create, privateKey, licensePath }) => {
     const online = signLicense(privateKey, {

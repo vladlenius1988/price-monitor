@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.22.0');
+  assert.equal(packageJson.version, '4.22.1');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1531,6 +1531,8 @@ test('shows a store capability guide and supports one-click repeated monitoring'
 test('embeds a searchable offline user guide in the application', () => {
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
   const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
   assert.match(html, /id="show-guide"/);
   assert.match(html, /id="guide-dialog"/);
   assert.match(html, /id="guide-search"[^>]+type="search"/);
@@ -1544,6 +1546,11 @@ test('embeds a searchable offline user guide in the application', () => {
   assert.match(renderer, /function filterGuideSections\(\)/);
   assert.match(renderer, /tokens\.every/);
   assert.match(renderer, /function navigateGuide\(event\)/);
+  assert.equal((html.match(/data-app-version/g) || []).length, 2);
+  assert.doesNotMatch(html, /Довідка Price Monitor 4\.18\.1/);
+  assert.match(renderer, /function initializeAppInfo\(\)/);
+  assert.match(preload, /getAppInfo: \(\) => ipcRenderer\.invoke\('app:info'\)/);
+  assert.match(main, /ipcMain\.handle\('app:info'/);
 });
 
 test('recognizes barcode searches in the MAKEUP interface automatically', () => {
