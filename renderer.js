@@ -41,6 +41,9 @@ const activateLicenseButton = document.getElementById('activate-license');
 const exportLicenseRequestButton = document.getElementById('export-license-request');
 const importLicenseButton = document.getElementById('import-license');
 const licenseActionStatus = document.getElementById('license-action-status');
+const activationServerState = document.getElementById('activation-server-state');
+const activationDeviceState = document.getElementById('activation-device-state');
+const activationLicenseState = document.getElementById('activation-license-state');
 const checkUpdateButton = document.getElementById('check-update');
 const updateNotice = document.getElementById('update-notice');
 const updateTitle = document.getElementById('update-title');
@@ -357,6 +360,7 @@ async function initializeAccess() {
   if (typeof parserApi?.getAccessStatus !== 'function') return;
   const status = await parserApi.getAccessStatus();
   updateAccessUi(status);
+  if (status?.isLicensed && !status.allowed && status.onlineConfigured) probeActivationServer().catch(() => {});
 }
 
 function updateAccessUi(status) {
@@ -388,6 +392,17 @@ function updateAccessUi(status) {
         : `Нові пошуки заблоковано. Код пристрою: ${accessStatus.deviceCode || 'не вдалося визначити'}.`;
     licenseActivation.hidden = accessStatus.allowed;
     onlineActivation.hidden = !accessStatus.onlineConfigured;
+    setActivationFact(activationDeviceState, `Код пристрою: ${accessStatus.deviceCode || 'не визначено'}`, Boolean(accessStatus.deviceCode));
+    setActivationFact(
+      activationLicenseState,
+      accessStatus.allowed
+        ? `Ліцензія: ${accessStatus.customerName || 'активна'}`
+        : accessStatus.blockedReason === 'pending_approval'
+          ? 'Ліцензія: очікує підтвердження'
+          : 'Ліцензія: не активована',
+      accessStatus.allowed,
+      !accessStatus.allowed && accessStatus.blockedReason !== 'pending_approval',
+    );
     if (accessStatus.allowed) licenseActionStatus.textContent = '';
   } else if (accessStatus.allowed) {
     licenseServerActions.hidden = true;
@@ -443,25 +458,62 @@ async function refreshLicenseNow() {
 async function activateLicense() {
   const activationCode = activationCodeInput.value.trim();
   if (!activationCode) {
-    licenseActionStatus.textContent = 'Введіть код активації.';
+    licenseActionStatus.textContent = 'Вставте довгий код активації, отриманий від власника Price Monitor.';
+    activationCodeInput.focus();
+    return;
+  }
+  const compactCode = activationCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const compactDevice = String(accessStatus?.deviceCode || '').replace(/[^A-Z0-9]/g, '');
+  if (compactCode.length === 16 || (compactDevice && compactCode === compactDevice)) {
+    licenseActionStatus.textContent = 'Це короткий код пристрою. Потрібен довгий код активації формату PM-XXXXX-… від власника програми.';
+    setActivationFact(activationLicenseState, 'Ліцензія: потрібен код активації', false, true);
     return;
   }
   setLicenseActionsBusy(true);
-  licenseActionStatus.textContent = 'Перевіряю код…';
+  licenseActionStatus.textContent = 'Крок 1 із 3: перевіряю код на сервері…';
+  setActivationFact(activationLicenseState, 'Ліцензія: перевіряю код…');
   try {
     const result = await parserApi.activateLicense(activationCode);
     updateAccessUi(result.status);
     if (result.updated) {
       activationCodeInput.value = '';
-      licenseActionStatus.textContent = 'Ліцензію активовано.';
+      if (result.status?.allowed) {
+        const successMessage = `Готово: код прийнято, пристрій прив’язано, ліцензію «${result.status.customerName || 'Price Monitor'}» активовано.`;
+        licenseActionStatus.textContent = successMessage;
+        licenseRefreshStatus.textContent = successMessage;
+        setActivationFact(activationServerState, 'Сервер: доступний', true);
+        setActivationFact(activationLicenseState, `Ліцензія: ${result.status.customerName || 'активна'}`, true);
+      } else {
+        licenseActionStatus.textContent = licenseActionError(result.reason || result.status?.blockedReason);
+      }
     } else {
       licenseActionStatus.textContent = licenseActionError(result.reason);
+      setActivationFact(activationLicenseState, 'Ліцензія: код не прийнято', false, true);
     }
   } catch (_error) {
     licenseActionStatus.textContent = 'Не вдалося зв’язатися із сервером ліцензій.';
+    setActivationFact(activationServerState, 'Сервер: недоступний', false, true);
   } finally {
     setLicenseActionsBusy(false);
   }
+}
+
+async function probeActivationServer() {
+  setActivationFact(activationServerState, 'Сервер: перевіряю…');
+  const result = await parserApi.probeLicenseServer?.();
+  setActivationFact(
+    activationServerState,
+    result?.available ? 'Сервер: доступний' : 'Сервер: тимчасово недоступний',
+    Boolean(result?.available),
+    !result?.available,
+  );
+}
+
+function setActivationFact(element, text, ok = false, error = false) {
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle('is-ok', ok);
+  element.classList.toggle('is-error', error);
 }
 
 async function exportLicenseRequest() {

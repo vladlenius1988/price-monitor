@@ -24,6 +24,7 @@ test('online activation binds devices, enforces the limit and returns a signed l
     assert.equal(first.license.payload.paidUntil, '2027-01-31T21:59:59.999Z');
     assert.equal(first.license.payload.expiresAt, '2026-10-20T12:00:00.000Z');
     assert.equal(second.license.payload.deviceId, DEVICE_B);
+    assert.equal((await store.findDevice('lic_test_2026', DEVICE_A)).label, 'TEST-PC');
     await assert.rejects(
       service.activate(request('PM-AAAAA-BBBBB-CCCCC-DDDDD', DEVICE_C, 'install-c')),
       (error) => error.code === 'device_limit' && error.status === 409,
@@ -54,11 +55,13 @@ test('daily check renews the local lease and carries flexible policy fields', as
       licenseId: activated.license.payload.licenseId,
       deviceId: DEVICE_A,
       installationId: 'install-a',
+      deviceLabel: 'RENAMED-PC',
       appVersion: '4.19.0',
     });
     assert.deepEqual(checked.license.payload.stores, ['eva', 'makeup']);
     assert.equal(checked.license.payload.features.resultLimit, 5000);
     assert.equal(checked.policy.leaseDays, 14);
+    assert.equal((await store.findDevice('lic_test_2026', DEVICE_A)).label, 'RENAMED-PC');
   });
 });
 
@@ -120,5 +123,5 @@ async function seedLicense(store, overrides = {}) {
 }
 
 function request(activationCode, deviceId, installationId) {
-  return { activationCode, deviceId, installationId, appVersion: '4.19.0' };
+  return { activationCode, deviceId, installationId, deviceLabel: 'TEST-PC', appVersion: '4.19.0' };
 }

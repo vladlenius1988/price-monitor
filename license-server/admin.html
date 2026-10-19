@@ -11,6 +11,9 @@
     main { max-width: 1320px; margin: 0 auto; padding: 28px 20px 60px; }
     h1 { margin: 0 0 6px; } h2 { margin: 0 0 16px; } p { color: #60708b; }
     section { background: white; border: 1px solid #dde3ec; border-radius: 16px; padding: 20px; margin-top: 18px; box-shadow: 0 10px 30px #20304a0c; }
+    .hero-section { border-color: #f0b39d; background: linear-gradient(135deg, #fff 0%, #fff7f3 100%); }
+    .section-heading { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+    .section-heading p { margin: 5px 0 0; }
     form, .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
     label { display: grid; gap: 5px; color: #41506a; font-size: 13px; font-weight: 650; }
     input, select, textarea, button { font: inherit; border-radius: 9px; border: 1px solid #cfd8e6; padding: 9px 11px; }
@@ -41,7 +44,25 @@
     .token-row[hidden] { display: none; }
     .wide { min-width: min(560px, 90vw); }
     .stack { display: grid; gap: 12px; }
-    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .table-wrap { overflow-x: auto; } }
+    .attention-grid { display: grid; gap: 10px; }
+    .attention-item { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px; border: 1px solid #ead8b2; border-radius: 11px; background: #fffbf1; }
+    .attention-item.is-new { border-color: #98c6ac; background: #f0faf4; }
+    .client-list { display: grid; gap: 12px; margin-top: 14px; }
+    .client-card { border: 1px solid #dde3ec; border-radius: 13px; padding: 15px; background: #fff; }
+    .client-summary { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(120px, .7fr)); gap: 14px; align-items: center; }
+    .client-summary strong { font-size: 16px; }
+    .status-pill { display: inline-block; width: fit-content; padding: 4px 8px; border-radius: 999px; background: #edf8f1; color: #21613e; font-size: 12px; font-weight: 750; }
+    .status-pill.is-blocked { background: #fff0ef; color: #8f2019; }
+    .client-actions { margin-top: 12px; border-top: 1px solid #e8edf3; padding-top: 10px; }
+    .client-actions summary { cursor: pointer; color: #41506a; font-weight: 750; }
+    .client-settings { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(360px, 1.2fr); gap: 18px; padding-top: 14px; }
+    .client-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .new-client-steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; counter-reset: onboarding; }
+    .new-client-steps li { counter-increment: onboarding; padding: 7px 10px; border-radius: 999px; background: #fff; border: 1px solid #f0c5b6; color: #714433; font-size: 12px; font-weight: 700; }
+    .new-client-steps li::before { content: counter(onboarding) '. '; color: #ef5b2a; }
+    .activation-package { display: grid; gap: 9px; }
+    .activation-package textarea { width: 100%; min-height: 120px; resize: vertical; background: #fff; color: #172033; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -56,30 +77,39 @@
       <article><strong id="event-count">0</strong><span class="muted">подій у журналі</span></article>
     </div>
 
+    <section class="hero-section">
+      <div class="section-heading">
+        <div><h2>Додати нового клієнта</h2><p>Заповніть правила один раз, скопіюйте готове повідомлення й надішліть клієнту.</p></div>
+        <span class="status-pill">Головна дія</span>
+      </div>
+      <ol class="new-client-steps"><li>Клієнт і строк</li><li>Кількість пристроїв</li><li>Доступні магазини</li><li>Код та інструкція</li></ol>
+      <form id="create-license">
+        <label>Організація / клієнт<input name="customerName" required placeholder="Наприклад, PROSTOR"></label>
+        <label>Оплачено до<input name="paidUntil" type="date" required></label>
+        <label>Дозволено комп’ютерів<input name="maxDevices" type="number" min="1" max="10000" value="10" required></label>
+        <label>Автономних днів<input name="leaseDays" type="number" min="1" max="90" value="14" required></label>
+        <input name="status" type="hidden" value="active">
+        <div class="store-options" id="create-stores"></div>
+        <button class="primary" type="submit">Створити клієнта й отримати код</button>
+      </form>
+      <div id="notice" class="notice" hidden></div>
+    </section>
+
+    <section id="attention-section" hidden>
+      <h2>Потребує уваги</h2>
+      <div id="attention" class="attention-grid"></div>
+    </section>
+
     <section>
       <div class="toolbar">
         <label class="token-row">Токен адміністратора<input id="admin-token" autocomplete="off"></label>
         <button id="refresh" type="button">Оновити дані</button>
         <span class="muted" id="server-status">Перевіряю сервер…</span>
       </div>
-      <div id="notice" class="notice" hidden></div>
     </section>
 
     <section>
-      <h2>Нова ліцензія</h2>
-      <form id="create-license">
-        <label>Клієнт<input name="customerName" required placeholder="Наприклад, PROSTOR"></label>
-        <label>Оплачено до<input name="paidUntil" type="date" required></label>
-        <label>Комп’ютерів<input name="maxDevices" type="number" min="1" max="10000" value="10" required></label>
-        <label>Автономних днів<input name="leaseDays" type="number" min="1" max="90" value="14" required></label>
-        <label>Початковий стан<select name="status"><option value="pending">Очікує підтвердження</option><option value="active">Одразу активна</option></select></label>
-        <div class="store-options" id="create-stores"></div>
-        <button class="primary" type="submit">Створити й видати код</button>
-      </form>
-    </section>
-
-    <section>
-      <h2>Клієнти й пристрої</h2>
+      <div class="section-heading"><div><h2>Поточні клієнти</h2><p>Змінюйте правила лише при оплаті, зміні договору або заміні пристрою.</p></div></div>
       <div id="licenses" class="muted table-wrap">Ще не завантажено.</div>
     </section>
 

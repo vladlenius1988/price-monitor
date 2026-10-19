@@ -102,11 +102,24 @@ h2 { margin-bottom: 4px; font-size: 20px; }
 .demo-access-banner.is-licensed small { color: #47725c; }
 .demo-access-banner.is-licensed.is-blocked { border-color: #e0aaa5; background: #fff0ef; color: #8f2019; }
 .demo-access-banner.is-licensed.is-blocked strong, .demo-access-banner.is-licensed.is-blocked span { color: #a92a22; }
-.license-activation { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(143, 32, 25, .18); }
+.license-activation { width: 100%; display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(143, 32, 25, .18); }
 .license-server-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(36, 91, 61, .16); }
 .license-server-actions small { text-align: left; }
-.activation-code-row { display: flex; gap: 8px; align-items: center; flex: 1 1 380px; }
-.activation-code-row input { min-width: 220px; flex: 1; border: 1px solid #d5b2ae; border-radius: 9px; padding: 8px 10px; font: inherit; text-transform: uppercase; }
+.activation-guide { display: grid !important; gap: 8px !important; align-items: start !important; }
+.activation-guide > strong { font-size: 16px; }
+.activation-guide ol { margin: 0; padding-left: 22px; color: #5f3d38; font-size: 13px; line-height: 1.55; }
+.activation-facts { display: flex !important; flex-wrap: wrap; gap: 7px !important; }
+.activation-fact { padding: 5px 8px; border: 1px solid #e4c5c0; border-radius: 999px; background: rgba(255,255,255,.65); color: #6d403c !important; font-size: 12px !important; font-weight: 700 !important; }
+.activation-fact.is-ok { border-color: #89b99f; background: #edf8f1; color: #21613e !important; }
+.activation-fact.is-error { border-color: #dfa7a1; background: #fff0ef; color: #8f2019 !important; }
+.activation-code-row { display: grid; gap: 6px; }
+.activation-code-row label { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 750; color: #6d403c; }
+.activation-code-row label small { font-weight: 500; }
+.activation-code-row > div { display: flex; gap: 8px; align-items: center; }
+.activation-code-row input { min-width: 220px; flex: 1; border: 1px solid #d5b2ae; border-radius: 9px; padding: 10px 12px; font: inherit; text-transform: uppercase; }
+.backup-activation { border-top: 1px dashed rgba(143, 32, 25, .2); padding-top: 9px; }
+.backup-activation summary { cursor: pointer; color: #6d403c; font-size: 13px; font-weight: 700; }
+.backup-activation p { margin: 7px 0; color: #8c5c45; font-size: 12px; }
 .license-action-status { width: 100%; color: #6d403c !important; text-align: left !important; }
 .update-notice { width: 100%; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid #8fc1a6; border-radius: 10px; background: #f4fbf7; }
 .update-notice > div { display: grid; gap: 3px; }

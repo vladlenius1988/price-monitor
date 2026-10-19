@@ -96,6 +96,7 @@ class LicenseService {
     await this.store.upsertDevice({
       ...device,
       installationId,
+      label: normalizeLabel(request.deviceLabel) || device.label,
       appVersion: normalizeVersion(request.appVersion),
       lastSeenAt: this.isoNow(),
     });

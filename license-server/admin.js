@@ -21,6 +21,8 @@ const tokenRow = document.querySelector('.token-row');
 const notice = document.getElementById('notice');
 const licenses = document.getElementById('licenses');
 const events = document.getElementById('events');
+const attentionSection = document.getElementById('attention-section');
+const attention = document.getElementById('attention');
 const createForm = document.getElementById('create-license');
 const createStores = document.getElementById('create-stores');
 const refreshButton = document.getElementById('refresh');
@@ -40,6 +42,7 @@ setDefaultPaidUntil();
 refreshButton.addEventListener('click', () => refresh().catch(showError));
 createForm.addEventListener('submit', (event) => createLicense(event).catch(showError));
 licenses.addEventListener('click', (event) => handleLicenseAction(event).catch(showError));
+attention.addEventListener('click', focusAttentionClient);
 selectReleaseButton.addEventListener('click', () => selectReleaseInstaller().catch(showError));
 publishReleaseForm.addEventListener('submit', (event) => publishRelease(event).catch(showError));
 telegramForm.addEventListener('submit', (event) => saveTelegram(event).catch(showError));
@@ -120,7 +123,7 @@ async function createLicense(event) {
     }),
   });
   const copied = await copyActivationCode(body.activationCode);
-  showActivationCode(body.activationCode, { copied, regenerated: false });
+  showActivationCode(body.activationCode, { copied, regenerated: false, license: body.license });
   createForm.reset();
   createForm.elements.maxDevices.value = 10;
   createForm.elements.leaseDays.value = 14;
@@ -134,6 +137,7 @@ async function refresh({ quiet = false } = {}) {
   try {
     const data = await api('/admin/api/overview');
     renderSummary(data);
+    renderAttention(data.licenses || []);
     renderLicenses(data.licenses || []);
     renderEvents(data.events || []);
     renderReleases(data.releases || []);
@@ -160,31 +164,74 @@ function renderLicenses(items) {
     licenses.innerHTML = '<p>Ліцензій ще немає.</p>';
     return;
   }
-  licenses.innerHTML = `<table><thead><tr><th>Клієнт</th><th>Статус</th><th>Правила й магазини</th><th>Пристрої</th><th>Дії</th></tr></thead><tbody>${items.map((item) => `
-    <tr>
-      <td><strong>${escapeHtml(item.customerName)}</strong><br><code>${escapeHtml(item.id)}</code><br><span class="muted">код ···${escapeHtml(item.activationHint || '')}</span></td>
-      <td>${escapeHtml(statusLabel(item.status))}<br><span class="muted">до ${formatDate(item.paidUntil)}</span></td>
-      <td><div class="license-rules">
-        <label>Оплачено до<input type="date" data-field="paidUntil" data-id="${escapeHtml(item.id)}" value="${escapeHtml(String(item.paidUntil).slice(0, 10))}"></label>
-        <label>Комп’ютерів<input type="number" min="1" max="10000" data-field="maxDevices" data-id="${escapeHtml(item.id)}" value="${Number(item.maxDevices) || 1}"></label>
-        <label>Автономних днів<input type="number" min="1" max="90" data-field="leaseDays" data-id="${escapeHtml(item.id)}" value="${Number(item.leaseDays) || 14}"></label>
-        <div class="license-stores" data-stores-for="${escapeHtml(item.id)}">${storeCheckboxMarkup(item.stores || [], `license-${item.id}`)}</div>
-      </div></td>
-      <td>${renderDevices(item)}</td>
-      <td>
-        <button data-action="save" data-id="${escapeHtml(item.id)}">Зберегти правила</button>
-        <button data-action="new-code" data-id="${escapeHtml(item.id)}">Новий код</button>
-        <button data-action="status" data-status="active" data-id="${escapeHtml(item.id)}">Підтвердити</button>
-        <button data-action="status" data-status="suspended" data-id="${escapeHtml(item.id)}">Призупинити</button>
-        <button class="danger" data-action="status" data-status="revoked" data-id="${escapeHtml(item.id)}">Заблокувати</button>
-      </td>
-    </tr>`).join('')}</tbody></table>`;
+  licenses.innerHTML = `<div class="client-list">${items.map((item) => {
+    const activeDevices = (item.devices || []).filter((device) => device.status !== 'removed');
+    const blocked = item.status !== 'active';
+    return `<article class="client-card" id="client-${escapeHtml(item.id)}">
+      <div class="client-summary">
+        <div><strong>${escapeHtml(item.customerName)}</strong><br><code>${escapeHtml(item.id)}</code><br><span class="muted">код активації ···${escapeHtml(item.activationHint || '')}</span></div>
+        <div><span class="status-pill ${blocked ? 'is-blocked' : ''}">${escapeHtml(statusLabel(item.status))}</span></div>
+        <div><strong>${activeDevices.length}/${Number(item.maxDevices) || 1}</strong><br><span class="muted">підключено пристроїв</span></div>
+        <div><strong>${escapeHtml(formatDate(item.paidUntil))}</strong><br><span class="muted">оплачено до</span></div>
+      </div>
+      <details class="client-actions">
+        <summary>Керування клієнтом</summary>
+        <div class="client-settings">
+          <div><div class="license-rules">
+            <label>Оплачено до<input type="date" data-field="paidUntil" data-id="${escapeHtml(item.id)}" value="${escapeHtml(String(item.paidUntil).slice(0, 10))}"></label>
+            <label>Дозволено комп’ютерів<input type="number" min="1" max="10000" data-field="maxDevices" data-id="${escapeHtml(item.id)}" value="${Number(item.maxDevices) || 1}"></label>
+            <label>Автономних днів<input type="number" min="1" max="90" data-field="leaseDays" data-id="${escapeHtml(item.id)}" value="${Number(item.leaseDays) || 14}"></label>
+            <div class="license-stores" data-stores-for="${escapeHtml(item.id)}">${storeCheckboxMarkup(item.stores || [], `license-${item.id}`)}</div>
+          </div><div class="client-buttons">
+            <button class="primary" data-action="save" data-id="${escapeHtml(item.id)}">Зберегти зміни</button>
+            <button data-action="new-code" data-id="${escapeHtml(item.id)}">Випустити новий код</button>
+            <button data-action="status" data-status="active" data-id="${escapeHtml(item.id)}">Зробити активною</button>
+            <button data-action="status" data-status="suspended" data-id="${escapeHtml(item.id)}">Призупинити</button>
+            <button class="danger" data-action="status" data-status="revoked" data-id="${escapeHtml(item.id)}">Заблокувати</button>
+          </div></div>
+          <div><strong>Підключені пристрої</strong>${renderDevices(item)}</div>
+        </div>
+      </details>
+    </article>`;
+  }).join('')}</div>`;
 }
 
 function renderDevices(license) {
   const active = (license.devices || []).filter((device) => device.status !== 'removed');
   if (!active.length) return '<span class="muted">Немає</span>';
-  return active.map((device) => `<div class="device"><span><code>${escapeHtml(shortCode(device.deviceId))}</code><br><span class="muted">${escapeHtml(device.appVersion || 'версія невідома')}</span></span><button class="danger" data-action="remove-device" data-id="${escapeHtml(license.id)}" data-device="${escapeHtml(device.deviceId)}">Відв’язати</button></div>`).join('');
+  return active.map((device) => `<div class="device"><span><strong>${escapeHtml(device.label || 'Комп’ютер без назви')}</strong><br><code>${escapeHtml(shortCode(device.deviceId))}</code><br><span class="muted">версія ${escapeHtml(device.appVersion || 'невідома')} · перше підключення ${escapeHtml(formatDateTime(device.firstSeenAt))} · останній зв’язок ${escapeHtml(formatDateTime(device.lastSeenAt))}</span></span><button class="danger" data-action="remove-device" data-id="${escapeHtml(license.id)}" data-device="${escapeHtml(device.deviceId)}">Відв’язати</button></div>`).join('');
+}
+
+function renderAttention(items) {
+  const now = Date.now();
+  const messages = [];
+  for (const license of items) {
+    const devices = (license.devices || []).filter((device) => device.status !== 'removed');
+    for (const device of devices) {
+      const firstSeen = Date.parse(device.firstSeenAt || '');
+      if (license.status === 'active' && Number.isFinite(firstSeen) && now - firstSeen <= 48 * 60 * 60 * 1000) {
+        messages.push({ kind: 'new', license, text: `Новий пристрій ${device.label || shortCode(device.deviceId)} підключено до «${license.customerName}».` });
+      }
+    }
+    const paidUntil = Date.parse(license.paidUntil || '');
+    const days = Number.isFinite(paidUntil) ? Math.ceil((paidUntil - now) / (24 * 60 * 60 * 1000)) : null;
+    if (license.status === 'active' && days !== null && days >= 0 && days <= 14) {
+      messages.push({ kind: 'warning', license, text: `Оплата «${license.customerName}» завершується ${formatDate(license.paidUntil)}.` });
+    }
+    if (license.status === 'pending') messages.push({ kind: 'warning', license, text: `Ліцензія «${license.customerName}» очікує рішення.` });
+  }
+  attentionSection.hidden = messages.length === 0;
+  attention.innerHTML = messages.length
+    ? messages.map((item) => `<div class="attention-item ${item.kind === 'new' ? 'is-new' : ''}"><span>${escapeHtml(item.text)}</span><button type="button" data-attention-license="${escapeHtml(item.license.id)}">Відкрити клієнта</button></div>`).join('')
+    : '';
+}
+
+function focusAttentionClient(event) {
+  const button = event.target.closest('[data-attention-license]');
+  if (!button) return;
+  const card = document.getElementById(`client-${button.dataset.attentionLicense}`);
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card?.querySelector('details')?.setAttribute('open', '');
 }
 
 function renderEvents(items) {
@@ -221,7 +268,7 @@ async function handleLicenseAction(event) {
       if (!confirmed) return;
       const body = await api(`/admin/api/licenses/${encodeURIComponent(id)}/activation-code`, { method: 'POST' });
       const copied = await copyActivationCode(body.activationCode);
-      showActivationCode(body.activationCode, { copied, regenerated: true });
+      showActivationCode(body.activationCode, { copied, regenerated: true, license: body.license });
     } else if (button.dataset.action === 'status') {
       await api(`/admin/api/licenses/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.status }) });
     } else if (button.dataset.action === 'remove-device') {
@@ -337,14 +384,14 @@ function showNotice(message) {
   notice.textContent = message;
 }
 
-function showActivationCode(code, { copied = false, regenerated = false } = {}) {
+function showActivationCode(code, { copied = false, regenerated = false, license = {} } = {}) {
   notice.hidden = false;
   notice.classList.remove('error');
   notice.replaceChildren();
   const title = document.createElement('strong');
   title.textContent = regenerated ? 'Новий код активації створено.' : 'Код активації створено.';
   const description = document.createElement('span');
-  description.textContent = ' Він показується лише зараз.';
+  description.textContent = ` Клієнт: ${license.customerName || 'не вказано'}. Код показується лише зараз.`;
   const codeElement = document.createElement('code');
   codeElement.textContent = String(code || '');
   const copyButton = document.createElement('button');
@@ -358,7 +405,28 @@ function showActivationCode(code, { copied = false, regenerated = false } = {}) 
     copyButton.textContent = success ? 'Скопійовано' : 'Не вдалося скопіювати';
     copyStatus.textContent = success ? ' Код у буфері обміну.' : ' Виділіть код вище та скопіюйте вручну.';
   });
-  notice.append(title, description, codeElement, copyButton, copyStatus);
+  const message = activationMessage(code, license);
+  const messageLabel = document.createElement('strong');
+  messageLabel.textContent = 'Готове повідомлення клієнту:';
+  const messageBox = document.createElement('textarea');
+  messageBox.readOnly = true;
+  messageBox.value = message;
+  const copyMessageButton = document.createElement('button');
+  copyMessageButton.type = 'button';
+  copyMessageButton.textContent = 'Скопіювати код та інструкцію';
+  copyMessageButton.addEventListener('click', async () => {
+    const success = await copyActivationCode(message);
+    copyMessageButton.textContent = success ? 'Повідомлення скопійовано' : 'Не вдалося скопіювати';
+  });
+  const packageBlock = document.createElement('div');
+  packageBlock.className = 'activation-package';
+  packageBlock.append(messageLabel, messageBox, copyMessageButton);
+  notice.append(title, description, codeElement, copyButton, copyStatus, packageBlock);
+}
+
+function activationMessage(code, license = {}) {
+  const customer = license.customerName ? ` для «${license.customerName}»` : '';
+  return `Встановіть Price Monitor та відкрийте блок активації${customer}.\n\nВставте цей довгий код у поле «Код активації»:\n${String(code || '')}\n\nКороткий код пристрою вводити не потрібно. Після успішної активації програма збереже ліцензію на цьому комп’ютері.`;
 }
 
 async function copyActivationCode(code) {

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { randomUUID } = crypto;
-const { getDeviceCode, getDeviceId } = require('./device-identity');
+const { getDeviceCode, getDeviceId, getDeviceLabel } = require('./device-identity');
 
 const STATE_PREFIX = Buffer.from('PMLIC1\0', 'utf8');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -22,6 +22,7 @@ class LicensedAccessStore {
     now = () => Date.now(),
     fetchFn = globalThis.fetch,
     deviceIdProvider = getDeviceId,
+    deviceLabelProvider = getDeviceLabel,
   } = {}) {
     this.edition = edition === 'licensed' ? 'licensed' : 'full';
     this.licensePath = licensePath;
@@ -34,6 +35,7 @@ class LicensedAccessStore {
     this.now = now;
     this.fetchFn = fetchFn;
     this.deviceIdProvider = deviceIdProvider;
+    this.deviceLabelProvider = deviceLabelProvider;
     this.licenseDocument = null;
     this.licenseError = '';
     this.state = null;
@@ -210,7 +212,7 @@ class LicensedAccessStore {
           activationCode: normalizedCode,
           installationId: this.state.installationId,
           deviceId,
-          deviceLabel: '',
+          deviceLabel: this.deviceLabelProvider(),
           appVersion: this.appVersion,
           edition: 'licensed',
         }),
@@ -262,6 +264,7 @@ class LicensedAccessStore {
           licenseId: this.licenseDocument.payload.licenseId,
           installationId: this.state.installationId,
           deviceId: this.deviceIdProvider(),
+          deviceLabel: this.deviceLabelProvider(),
           appVersion: this.appVersion,
           edition: 'licensed',
         }),

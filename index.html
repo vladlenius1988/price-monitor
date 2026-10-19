@@ -43,12 +43,32 @@
         <button id="install-update" class="compact-button accent-button" type="button">Завантажити й встановити</button>
       </div>
       <div id="license-activation" class="license-activation" hidden>
-        <div id="online-activation" class="activation-code-row" hidden>
-          <input id="activation-code" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Код активації">
-          <button id="activate-license" class="compact-button accent-button" type="button">Активувати</button>
+        <div class="activation-guide">
+          <strong>Як активувати програму</strong>
+          <ol>
+            <li>Отримайте довгий код активації у власника Price Monitor.</li>
+            <li>Вставте його в поле нижче та натисніть «Активувати».</li>
+            <li>Після підтвердження програма збереже ліцензію на цьому комп’ютері.</li>
+          </ol>
+          <div class="activation-facts">
+            <span id="activation-server-state" class="activation-fact">Сервер: перевіряю…</span>
+            <span id="activation-device-state" class="activation-fact">Код пристрою: визначаю…</span>
+            <span id="activation-license-state" class="activation-fact">Ліцензія: не активована</span>
+          </div>
         </div>
-        <button id="export-license-request" class="compact-button" type="button">Зберегти запит</button>
-        <button id="import-license" class="compact-button" type="button">Встановити ліцензію</button>
+        <div id="online-activation" class="activation-code-row" hidden>
+          <label for="activation-code">Код активації <small>це не короткий код пристрою</small></label>
+          <div>
+            <input id="activation-code" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="PM-XXXXX-XXXXX-XXXXX-…">
+            <button id="activate-license" class="compact-button accent-button" type="button">Активувати</button>
+          </div>
+        </div>
+        <details class="backup-activation">
+          <summary>Резервна активація без сервера</summary>
+          <p>Використовуйте лише за вказівкою власника програми.</p>
+          <button id="export-license-request" class="compact-button" type="button">Зберегти запит у файл</button>
+          <button id="import-license" class="compact-button" type="button">Встановити файл ліцензії</button>
+        </details>
         <small id="license-action-status" class="license-action-status"></small>
       </div>
     </section>

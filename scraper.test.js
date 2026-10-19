@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.22.2');
+  assert.equal(packageJson.version, '4.23.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1055,6 +1055,9 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
 test('cloud admin and cloud client stay isolated and use the HTTPS staging server', () => {
   const adminConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.cloud-admin.yml'), 'utf8');
   const clientConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.cloud-client.yml'), 'utf8');
+  const clientHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const clientRenderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const adminHtml = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.html'), 'utf8');
   const adminPreload = fs.readFileSync(path.join(__dirname, 'license-server', 'admin-preload.js'), 'utf8');
   const adminRenderer = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
   assert.match(adminConfig, /com\.vladlen\.pricemonitor\.cloudadmin/);
@@ -1062,11 +1065,23 @@ test('cloud admin and cloud client stay isolated and use the HTTPS staging serve
   assert.match(adminConfig, /https:\/\/price-monitor-license-staging\.vladlenius\.workers\.dev/);
   assert.match(clientConfig, /https:\/\/price-monitor-license-staging\.vladlenius\.workers\.dev/);
   assert.match(clientConfig, /priceMonitorBundledLicense: false/);
+  assert.match(clientConfig, /priceMonitorUserDataName: Price Monitor Cloud Test/);
+  assert.match(clientHtml, /Як активувати програму/);
+  assert.match(clientHtml, /це не короткий код пристрою/);
+  assert.match(clientHtml, /Резервна активація без сервера/);
+  assert.match(clientRenderer, /Це короткий код пристрою/);
+  assert.match(clientRenderer, /код прийнято, пристрій прив’язано/);
+  assert.match(adminHtml, /Додати нового клієнта/);
+  assert.match(adminHtml, /Потребує уваги/);
+  assert.match(adminHtml, /name="status" type="hidden" value="active"/);
   assert.match(adminPreload, /owner:api-request/);
   assert.match(adminPreload, /owner:copy-text/);
   assert.match(adminRenderer, /priceMonitorOwner\.apiRequest/);
   assert.match(adminRenderer, /data-action="new-code"/);
   assert.match(adminRenderer, /function showActivationCode\(/);
+  assert.match(adminRenderer, /Скопіювати код та інструкцію/);
+  assert.match(adminRenderer, /function renderAttention\(/);
+  assert.match(adminRenderer, /device\.label/);
 });
 
 test('loads saved lists before the renderer and exposes their Ukrainian controls', () => {

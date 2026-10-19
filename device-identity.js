@@ -19,6 +19,11 @@ function getDeviceCode(deviceId = getDeviceId()) {
   return compact.match(/.{1,4}/g).join('-');
 }
 
+function getDeviceLabel() {
+  const hostname = String(os.hostname() || '').trim();
+  return hostname.slice(0, 80) || 'Windows PC';
+}
+
 function readWindowsMachineGuid() {
   const windowsDirectory = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
   const regPath = path.join(windowsDirectory, 'System32', 'reg.exe');
@@ -37,4 +42,4 @@ function readWindowsMachineGuid() {
   return match ? match[1].trim() : '';
 }
 
-module.exports = { getDeviceCode, getDeviceId };
+module.exports = { getDeviceCode, getDeviceId, getDeviceLabel };

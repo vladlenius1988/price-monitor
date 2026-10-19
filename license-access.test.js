@@ -199,10 +199,16 @@ test('universal licensed build activates a clean computer without a bundled lice
       const body = JSON.parse(request.body);
       assert.equal(body.activationCode, 'PMAAAAABBBBBCCCCCDDDDD');
       assert.equal(body.deviceId, DEVICE_ID);
+      assert.equal(body.deviceLabel, 'LENA-LAPTOP');
       assert.equal(body.installationId.length >= 8, true);
       return { ok: true, json: async () => ({ license: online }) };
     };
-    const store = create({ bundledLicensePath: '', serverUrl: 'https://license.example.test', fetchFn });
+    const store = create({
+      bundledLicensePath: '',
+      serverUrl: 'https://license.example.test',
+      fetchFn,
+      deviceLabelProvider: () => 'LENA-LAPTOP',
+    });
     assert.equal(store.getStatus().blockedReason, 'license_missing');
     const result = await store.activateOnline('PM-AAAAA-BBBBB-CCCCC-DDDDD');
     assert.equal(result.updated, true);
