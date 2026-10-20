@@ -1,0 +1,33 @@
+appId: com.vladlen.pricemonitor.owner
+productName: Price Monitor Owner
+artifactName: Price Monitor Owner Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-production-admin
+files:
+  - license-server/cloud-admin-main.js
+  - license-server/owner-api.js
+  - license-server/admin-preload.js
+  - license-server/admin.html
+  - license-server/admin.js
+  - package.json
+extraMetadata:
+  main: license-server/cloud-admin-main.js
+  name: price-monitor-owner
+  productName: Price Monitor Owner
+  priceMonitorEdition: production-admin
+  priceMonitorAdminApiUrl: https://price-monitor-license-production.vladlenius.workers.dev
+  priceMonitorAdminAppName: Price Monitor Owner
+  priceMonitorAdminUserDataName: Price Monitor Owner
+  priceMonitorAdminAppId: com.vladlen.pricemonitor.owner
+  priceMonitorAdminTitle: Price Monitor — production
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null

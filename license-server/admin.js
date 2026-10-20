@@ -14,6 +14,12 @@ const EVENT_LABELS = {
   activation_rejected: 'Відхилена активація',
   license_blocked: 'Заблокована ліцензія',
   telegram_notice: 'Telegram-сповіщення',
+  admin_license_created: 'Власник створив клієнта',
+  admin_license_updated: 'Власник змінив ліцензію',
+  admin_activation_code_rotated: 'Власник оновив код активації',
+  admin_device_removed: 'Власник відв’язав пристрій',
+  rate_limited: 'Забагато запитів',
+  server_error: 'Помилка сервера',
 };
 
 const tokenInput = document.getElementById('admin-token');
@@ -90,7 +96,7 @@ async function api(path, options = {}) {
       method: options.method || 'GET',
       body: options.body || '',
     });
-    if (!result?.ok) throw new Error(result?.body?.error || `HTTP ${result?.status || 0}`);
+    if (!result?.ok) throw apiError(result?.body, result?.status || 0);
     return result.body || {};
   }
   const response = await fetch(path, {
@@ -102,7 +108,7 @@ async function api(path, options = {}) {
     },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+  if (!response.ok) throw apiError(body, response.status);
   return body;
 }
 
@@ -136,6 +142,7 @@ async function refresh({ quiet = false } = {}) {
   if (!quiet) refreshButton.disabled = true;
   try {
     const data = await api('/admin/api/overview');
+    renderService(data.service || {});
     renderSummary(data);
     renderAttention(data.licenses || []);
     renderLicenses(data.licenses || []);
@@ -143,11 +150,28 @@ async function refresh({ quiet = false } = {}) {
     renderReleases(data.releases || []);
     renderTelegramSettings(data.settings || {});
     serverStatus.textContent = ownerMode === 'cloud'
-      ? `Хмарний сервер працює · ${new Date().toLocaleTimeString('uk-UA')}`
+      ? `${data.service?.environment === 'production' ? 'Production' : 'Тестовий сервер'} працює · ${new Date().toLocaleTimeString('uk-UA')}`
       : `Сервер працює · клієнтський порт ${data.publicServer?.port || '—'} · ${new Date().toLocaleTimeString('uk-UA')}`;
   } finally {
     if (!quiet) refreshButton.disabled = false;
   }
+}
+
+function renderService(service) {
+  const environment = String(service.environment || 'unknown');
+  const environmentElement = document.getElementById('service-environment');
+  environmentElement.textContent = environment === 'production' ? 'PRODUCTION' : environment.toUpperCase();
+  environmentElement.className = environment === 'production' ? 'environment-production' : 'environment-staging';
+  document.getElementById('service-version').textContent = service.version || '—';
+  document.getElementById('service-database').textContent = service.database === 'ready' ? 'Працює' : 'Недоступна';
+  document.getElementById('service-recovery').textContent = service.recoveryDays ? `${service.recoveryDays} днів` : '—';
+  document.getElementById('service-request').textContent = `Ідентифікатор останньої перевірки: ${service.requestId || '—'}`;
+}
+
+function apiError(body = {}, status = 0) {
+  const code = body?.error || `HTTP ${status}`;
+  const suffix = body?.requestId ? ` · запит ${body.requestId}` : '';
+  return new Error(`${code}${suffix}`);
 }
 
 function renderSummary(data) {

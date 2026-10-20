@@ -134,10 +134,58 @@ export class D1LicenseStore {
     ).run();
   }
 
+  async health() {
+    const row = await this.db.prepare('SELECT 1 AS ready').first();
+    return { ok: Number(row?.ready) === 1 };
+  }
+
+  async consumeRateLimit({ key, limit, windowSeconds, nowMs = Date.now() }) {
+    const safeLimit = Math.max(1, Math.min(100000, Number(limit) || 1));
+    const safeWindow = Math.max(1, Math.min(86400, Number(windowSeconds) || 60));
+    const windowMs = safeWindow * 1000;
+    const windowStartMs = Math.floor(Number(nowMs) / windowMs) * windowMs;
+    const windowStartedAt = new Date(windowStartMs).toISOString();
+    const expiresAt = new Date(windowStartMs + windowMs).toISOString();
+    await this.db.prepare(`
+      INSERT INTO request_limits (rate_key, request_count, window_started_at, expires_at)
+      VALUES (?1, 1, ?2, ?3)
+      ON CONFLICT(rate_key) DO UPDATE SET
+        request_count = CASE
+          WHEN request_limits.expires_at <= excluded.window_started_at THEN 1
+          ELSE request_limits.request_count + 1
+        END,
+        window_started_at = CASE
+          WHEN request_limits.expires_at <= excluded.window_started_at THEN excluded.window_started_at
+          ELSE request_limits.window_started_at
+        END,
+        expires_at = CASE
+          WHEN request_limits.expires_at <= excluded.window_started_at THEN excluded.expires_at
+          ELSE request_limits.expires_at
+        END
+    `).bind(String(key), windowStartedAt, expiresAt).run();
+    const row = await this.db.prepare(
+      'SELECT request_count, expires_at FROM request_limits WHERE rate_key = ?1',
+    ).bind(String(key)).first();
+    const count = Number(row?.request_count) || 1;
+    const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(row?.expires_at || expiresAt) - Number(nowMs)) / 1000));
+    return {
+      allowed: count <= safeLimit,
+      limit: safeLimit,
+      remaining: Math.max(0, safeLimit - count),
+      retryAfterSeconds,
+    };
+  }
+
+  async cleanupOperationalData(now = new Date().toISOString()) {
+    const result = await this.db.prepare('DELETE FROM request_limits WHERE expires_at < ?1').bind(now).run();
+    return { removedRateLimits: Number(result?.meta?.changes) || 0 };
+  }
+
   async overview() {
     const licenses = await this.listLicenses();
     const devicesResult = await this.db.prepare('SELECT * FROM devices ORDER BY last_seen_at DESC').all();
     const eventsResult = await this.db.prepare('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 100').all();
+    const eventCountRow = await this.db.prepare('SELECT COUNT(*) AS total FROM events').first();
     const devices = (devicesResult.results || []).map(deviceFromRow);
     return {
       licenses: licenses.map(({ activationHash: _activationHash, ...license }) => ({
@@ -145,6 +193,7 @@ export class D1LicenseStore {
         devices: devices.filter((device) => device.licenseId === license.id),
       })),
       events: (eventsResult.results || []).map(eventFromRow),
+      eventCount: Number(eventCountRow?.total) || 0,
     };
   }
 }

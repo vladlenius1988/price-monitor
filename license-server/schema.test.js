@@ -31,3 +31,13 @@ test('D1 license updates persist regenerated activation codes', () => {
   assert.match(source, /record\.activationHash/);
   assert.match(source, /record\.activationHint/);
 });
+
+test('operational safety migration adds durable rate limits and event indexes', () => {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, 'migrations', '0002_operational_safety.sql'), 'utf8');
+  for (const source of [schema, migration]) {
+    assert.match(source, /CREATE TABLE IF NOT EXISTS request_limits/);
+    assert.match(source, /idx_request_limits_expiry/);
+    assert.match(source, /idx_events_type_time/);
+  }
+});

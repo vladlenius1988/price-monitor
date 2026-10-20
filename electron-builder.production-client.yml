@@ -1,0 +1,51 @@
+appId: com.vladlen.retailpricemonitor.online
+productName: Price Monitor Online
+artifactName: Price Monitor Online Setup ${version}.${ext}
+asar: true
+directories:
+  output: release-production-client
+files:
+  - main.js
+  - preload.js
+  - scraper.js
+  - batch.js
+  - saved-lists.js
+  - search-history.js
+  - comparison.js
+  - comparison-store.js
+  - archive-store.js
+  - archive-tools.js
+  - price-history-export.js
+  - multi-store-export.js
+  - change-report.js
+  - result-view.js
+  - demo-access.js
+  - license-access.js
+  - device-identity.js
+  - license-public-production.pem
+  - renderer.js
+  - index.html
+  - styles.css
+  - package.json
+extraMetadata:
+  name: price-monitor-online
+  productName: Price Monitor Online
+  priceMonitorEdition: licensed
+  priceMonitorBundledLicense: false
+  priceMonitorLicensePublicKey: license-public-production.pem
+  priceMonitorLicenseServerUrl: https://price-monitor-license-production.vladlenius.workers.dev
+  priceMonitorLiveLicenseIntervalMs: 0
+  priceMonitorAppName: Price Monitor Online
+  priceMonitorWindowTitle: Price Monitor — онлайн-ліцензія
+  priceMonitorAppId: com.vladlen.retailpricemonitor.online
+  priceMonitorUserDataName: Price Monitor Online
+npmRebuild: false
+win:
+  forceCodeSigning: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: false
+publish: null

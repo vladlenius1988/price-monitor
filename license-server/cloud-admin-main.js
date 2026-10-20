@@ -5,7 +5,10 @@ const path = require('path');
 const packageInfo = require('../package.json');
 const { createOwnerApiClient } = require('./owner-api');
 
-const APP_NAME = 'Price Monitor Cloud Admin';
+const APP_NAME = String(packageInfo.priceMonitorAdminAppName || 'Price Monitor Cloud Admin');
+const USER_DATA_NAME = String(packageInfo.priceMonitorAdminUserDataName || APP_NAME);
+const APP_ID = String(packageInfo.priceMonitorAdminAppId || 'com.vladlen.pricemonitor.cloudadmin');
+const WINDOW_TITLE = String(packageInfo.priceMonitorAdminTitle || 'Price Monitor — хмарне керування');
 const API_BASE_URL = process.env.PRICE_MONITOR_ADMIN_API_URL
   || packageInfo.priceMonitorAdminApiUrl
   || 'https://price-monitor-license-staging.vladlenius.workers.dev';
@@ -15,7 +18,7 @@ let ownerApiClient = null;
 
 const appDataRoot = app.getPath('appData');
 app.setName(APP_NAME);
-app.setPath('userData', path.join(appDataRoot, APP_NAME));
+app.setPath('userData', path.join(appDataRoot, USER_DATA_NAME));
 
 function ensureAdminToken() {
   const ownPath = path.join(app.getPath('userData'), 'admin-token.txt');
@@ -47,7 +50,7 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 650,
-    title: 'Price Monitor — хмарне керування',
+    title: WINDOW_TITLE,
     backgroundColor: '#f3f5f8',
     webPreferences: {
       preload: path.join(__dirname, 'admin-preload.js'),
@@ -91,7 +94,7 @@ if (!hasSingleInstanceLock) {
     mainWindow.focus();
   });
   app.whenReady().then(async () => {
-    app.setAppUserModelId('com.vladlen.pricemonitor.cloudadmin');
+    app.setAppUserModelId(APP_ID);
     try {
       ownerApiClient = createOwnerApiClient({ apiBaseUrl: API_BASE_URL, adminToken: ensureAdminToken() });
       await createWindow();

@@ -9,7 +9,9 @@
       "name": "price-monitor-license-staging",
       "workers_dev": true,
       "vars": {
-        "ENVIRONMENT": "staging"
+        "ENVIRONMENT": "staging",
+        "SERVICE_VERSION": "4.24.0",
+        "RATE_LIMITING_ENABLED": "false"
       },
       "d1_databases": [
         {
@@ -19,6 +21,27 @@
           "migrations_dir": "migrations"
         }
       ]
+    },
+    "production": {
+      "name": "price-monitor-license-production",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "SERVICE_VERSION": "4.24.0",
+        "RATE_LIMITING_ENABLED": "true"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "price-monitor-production",
+          "database_id": "628fb244-6c20-48bf-8b6d-6957f3ef53d8",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "triggers": {
+        "crons": ["17 3 * * *"]
+      }
     }
   }
 }

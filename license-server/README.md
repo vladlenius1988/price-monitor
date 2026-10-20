@@ -26,7 +26,7 @@ npm run license-server:local
 - новий пристрій займає місце лише після правильної активації;
 - видалений пристрій звільняє місце;
 - приватний ключ ніколи не входить до клієнтської збірки.
-- нова ліцензія з панелі спочатку очікує підтвердження;
+- нова ліцензія з панелі одразу активна, але працює лише після введення виданого коду активації;
 - маніфести оновлень підписуються тим самим Ed25519-ключем, а клієнт додатково перевіряє SHA-256 файла;
 - Telegram вимкнений, доки власник сам не збереже Bot token і Chat ID.
 
@@ -58,8 +58,55 @@ npx wrangler d1 migrations apply price-monitor-staging --remote --env staging --
 npx wrangler deploy --env staging --config wrangler.jsonc
 ```
 
-Перед публікацією обов'язково виконати `npm test` у корені проєкту. Адресу тестового API ще не слід вбудовувати у клієнтський реліз: спочатку треба підключити до хмари панель власника, реалізувати хмарну видачу оновлень і провести окремий тест на другому комп'ютері.
+Перед публікацією обов'язково виконати `npm test` у корені проєкту. Staging лишається полігоном і не містить бойових ліцензій.
 
-## Подальше бойове розгортання
+## Production-контур 4.24.0
 
-Поточний `staging` використовує тестовий ключ і призначений для перевірок. Перед продажами потрібні окремий бойовий Worker, окрема D1-база, новий приватний ключ, резервне копіювання даних, журнал помилок і контрольований процес оновлення клієнтів. Домашня IP-адреса для цього більше не потрібна.
+Бойовий контур повністю відокремлений від staging:
+
+- Worker: `price-monitor-license-production`;
+- HTTPS API: `https://price-monitor-license-production.vladlenius.workers.dev`;
+- база: Cloudflare D1 `price-monitor-production`;
+- середовище: `production`;
+- окремий Ed25519-ключ підпису ліцензій;
+- окремий токен власника у `%APPDATA%\Price Monitor Owner\admin-token.txt`;
+- обмеження частоти активацій, перевірок та адміністративних запитів;
+- щоденне прибирання лише тимчасових лічильників захисту;
+- журнал клієнтських і адміністративних дій;
+- публічний `/health` перевіряє не лише Worker, а й реальну готовність D1.
+
+Перевірка:
+
+```powershell
+Invoke-RestMethod https://price-monitor-license-production.vladlenius.workers.dev/health
+```
+
+Production-клієнт використовує файл `license-public-production.pem`. Закритий ключ знаходиться лише у секретах Cloudflare та локальному каталозі `.license-private`, який виключено з Git.
+
+## Безпечна публікація
+
+Звичайна production-публікація спочатку створює локальний SQL-бекап, потім застосовує міграції, публікує Worker і перевіряє `/health`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File license-server/scripts/deploy-cloud.ps1 -Environment production
+```
+
+`-SkipBackup` дозволено лише для найпершого розгортання порожньої бази. Для staging резервна копія перед публікацією не є обов'язковою.
+
+Окремий ручний бекап:
+
+```powershell
+npm run cloud:backup:production
+```
+
+Файли зберігаються у `backups/cloud/production/` разом із SHA-256 і не додаються до Git.
+
+## Відновлення D1
+
+Cloudflare Time Travel зберігає можливість повернути production-базу до попереднього стану. Спочатку лише отримати закладку, нічого не змінюючи:
+
+```powershell
+npx wrangler d1 time-travel info price-monitor-production --env production --config license-server/wrangler.jsonc --json
+```
+
+Відновлення є руйнівною операцією. Перед ним обов'язково зробити свіжий SQL-бекап і перевірити точну закладку. Команду `time-travel restore` не запускати як частину автоматичного деплою.

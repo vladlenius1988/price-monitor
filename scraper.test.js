@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.23.0');
+  assert.equal(packageJson.version, '4.24.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1082,6 +1082,22 @@ test('cloud admin and cloud client stay isolated and use the HTTPS staging serve
   assert.match(adminRenderer, /Скопіювати код та інструкцію/);
   assert.match(adminRenderer, /function renderAttention\(/);
   assert.match(adminRenderer, /device\.label/);
+});
+
+test('production apps use an isolated server, identity and signing key', () => {
+  const adminConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.production-admin.yml'), 'utf8');
+  const clientConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.production-client.yml'), 'utf8');
+  const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const workerConfig = fs.readFileSync(path.join(__dirname, 'license-server', 'wrangler.jsonc'), 'utf8');
+  assert.match(adminConfig, /com\.vladlen\.pricemonitor\.owner/);
+  assert.match(clientConfig, /com\.vladlen\.retailpricemonitor\.online/);
+  assert.match(adminConfig, /https:\/\/price-monitor-license-production\.vladlenius\.workers\.dev/);
+  assert.match(clientConfig, /https:\/\/price-monitor-license-production\.vladlenius\.workers\.dev/);
+  assert.match(clientConfig, /priceMonitorLicensePublicKey: license-public-production\.pem/);
+  assert.match(clientConfig, /priceMonitorLiveLicenseIntervalMs: 0/);
+  assert.match(mainSource, /priceMonitorLicensePublicKey/);
+  assert.match(workerConfig, /price-monitor-production/);
+  assert.match(workerConfig, /RATE_LIMITING_ENABLED/);
 });
 
 test('loads saved lists before the renderer and exposes their Ukrainian controls', () => {

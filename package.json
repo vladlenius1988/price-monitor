@@ -1,6 +1,6 @@
 {
   "name": "retail-price-monitor",
-  "version": "4.23.0",
+  "version": "4.24.0",
   "priceMonitorEdition": "full",
   "description": "Моніторинг цін за торговими марками в EVA, VARUS, MAKEUP, Аврорі, Notino та Rozetka",
   "main": "main.js",
@@ -8,7 +8,7 @@
     "start": "electron .",
     "start:demo": "set PRICE_MONITOR_EDITION=demo&& electron .",
     "start:licensed": "set PRICE_MONITOR_EDITION=licensed&& electron .",
-    "test": "node --test scraper.test.js demo-access.test.js license-access.test.js license-server/server-core.test.js license-server/local-server.test.js license-server/telegram-notifier.test.js license-server/worker-crypto.test.mjs license-server/schema.test.js license-server/owner-api.test.js",
+    "test": "node --test scraper.test.js demo-access.test.js license-access.test.js license-server/server-core.test.js license-server/local-server.test.js license-server/telegram-notifier.test.js license-server/worker-crypto.test.mjs license-server/schema.test.js license-server/owner-api.test.js license-server/server-safety.test.js",
     "license-server:local": "node license-server/local-server.js",
     "start:server": "electron license-server/app-main.js",
     "dist": "electron-builder",
@@ -19,7 +19,11 @@
     "dist:remote-client": "electron-builder --config electron-builder.remote-client.yml",
     "dist:cloud-admin": "electron-builder --config electron-builder.cloud-admin.yml",
     "dist:cloud-client": "electron-builder --config electron-builder.cloud-client.yml",
-    "cloud:deploy:staging": "wrangler deploy --config license-server/wrangler.jsonc --env staging"
+    "dist:production-admin": "electron-builder --config electron-builder.production-admin.yml",
+    "dist:production-client": "electron-builder --config electron-builder.production-client.yml",
+    "cloud:deploy:staging": "wrangler deploy --config license-server/wrangler.jsonc --env staging",
+    "cloud:deploy:production": "wrangler deploy --config license-server/wrangler.jsonc --env production",
+    "cloud:backup:production": "powershell -NoProfile -ExecutionPolicy Bypass -File license-server/scripts/backup-cloud.ps1 -Environment production"
   },
   "devDependencies": {
     "electron": "^43.4.1",

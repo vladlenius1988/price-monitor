@@ -685,7 +685,7 @@ if (!hasSingleInstanceLock) {
           ? ''
           : path.join(__dirname, 'paid-license.json'),
         statePath: path.join(app.getPath('userData'), 'license-state.dat'),
-        publicKeyPath: path.join(__dirname, 'license-public.pem'),
+        publicKeyPath: path.join(__dirname, String(packageInfo.priceMonitorLicensePublicKey || 'license-public.pem')),
         safeStorage,
         serverUrl: process.env.PRICE_MONITOR_LICENSE_SERVER_URL || packageInfo.priceMonitorLicenseServerUrl || '',
         appVersion: packageInfo.version,

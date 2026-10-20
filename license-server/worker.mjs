@@ -1,4 +1,5 @@
 import corePackage from './server-core.js';
+import safetyPackage from './server-safety.js';
 import { D1LicenseStore } from './d1-store.mjs';
 import { createActivationCode, createLicenseId, createWorkerCrypto } from './worker-crypto.mjs';
 
@@ -8,27 +9,36 @@ const {
   normalizeLicenseInput,
   normalizeLicensePatch,
 } = corePackage;
+const { rateLimitPolicy, requestId, safeEnvironment } = safetyPackage;
 
 export default {
   async fetch(request, env) {
+    const currentRequestId = requestId(request.headers.get('CF-Ray'), () => `req_${crypto.randomUUID().replace(/-/g, '')}`);
+    let store = null;
     try {
       const url = new URL(request.url);
-      const store = new D1LicenseStore(env.DB);
+      store = new D1LicenseStore(env.DB);
+      await enforceRateLimit(request, url, env, store);
       const cryptoProvider = createWorkerCrypto(env.LICENSE_PRIVATE_KEY_B64);
       const service = new LicenseService({ store, ...cryptoProvider });
       if (request.method === 'GET' && url.pathname === '/health') {
-        return json(200, { ok: true, service: 'price-monitor-license', time: new Date().toISOString() });
+        const database = await store.health();
+        return json(200, serviceStatus(env, database.ok, currentRequestId), currentRequestId);
       }
       if (request.method === 'POST' && url.pathname === '/v1/licenses/activate') {
-        return json(200, await service.activate(await readJson(request), context(request)));
+        return json(200, await service.activate(await readJson(request), context(request)), currentRequestId);
       }
       if (request.method === 'POST' && url.pathname === '/v1/licenses/check') {
-        return json(200, await service.check(await readJson(request), context(request)));
+        return json(200, await service.check(await readJson(request), context(request)), currentRequestId);
       }
       if (url.pathname.startsWith('/admin/api/')) {
         requireAdmin(request, env.ADMIN_TOKEN);
         if (request.method === 'GET' && url.pathname === '/admin/api/overview') {
-          return json(200, await store.overview());
+          const overview = await store.overview();
+          return json(200, {
+            ...overview,
+            service: serviceStatus(env, true, currentRequestId),
+          }, currentRequestId);
         }
         if (request.method === 'POST' && url.pathname === '/admin/api/licenses') {
           const normalized = normalizeLicenseInput(await readJson(request));
@@ -43,7 +53,12 @@ export default {
             createdAt: now,
             updatedAt: now,
           });
-          return json(201, { license: sanitizeLicense(record), activationCode });
+          await safeAudit(store, 'admin_license_created', record.id, request, {
+            customerName: record.customerName,
+            maxDevices: record.maxDevices,
+            paidUntil: record.paidUntil,
+          });
+          return json(201, { license: sanitizeLicense(record), activationCode }, currentRequestId);
         }
         const activationCodeMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)\/activation-code$/);
         if (activationCodeMatch && request.method === 'POST') {
@@ -57,33 +72,98 @@ export default {
             activationHint: activationCode.slice(-5),
             updatedAt: new Date().toISOString(),
           });
-          return json(200, { license: sanitizeLicense(updated), activationCode });
+          await safeAudit(store, 'admin_activation_code_rotated', id, request);
+          return json(200, { license: sanitizeLicense(updated), activationCode }, currentRequestId);
         }
         const licenseMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)$/);
         if (licenseMatch && request.method === 'PATCH') {
           const id = decodeURIComponent(licenseMatch[1]);
           const current = await store.findLicenseById(id);
           if (!current) throw new LicenseServiceError('license_not_found', 404);
-          const normalized = normalizeLicensePatch(await readJson(request), current);
+          const input = await readJson(request);
+          const normalized = normalizeLicensePatch(input, current);
           const updated = await store.updateLicense(id, { ...normalized, updatedAt: new Date().toISOString() });
-          return json(200, { license: sanitizeLicense(updated) });
+          await safeAudit(store, 'admin_license_updated', id, request, {
+            fields: Object.keys(input || {}).filter((key) => ['customerName', 'paidUntil', 'status', 'maxDevices', 'leaseDays', 'stores', 'features', 'updateChannel'].includes(key)),
+          });
+          return json(200, { license: sanitizeLicense(updated) }, currentRequestId);
         }
         const deviceMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)\/devices\/([a-f0-9]{64})$/i);
         if (deviceMatch && request.method === 'DELETE') {
           const removed = await store.removeDevice(decodeURIComponent(deviceMatch[1]), deviceMatch[2].toLowerCase());
           if (!removed) throw new LicenseServiceError('device_not_found', 404);
-          return json(200, { removed: true });
+          await safeAudit(store, 'admin_device_removed', decodeURIComponent(deviceMatch[1]), request, {
+            deviceId: deviceMatch[2].toLowerCase(),
+          });
+          return json(200, { removed: true }, currentRequestId);
         }
       }
-      return json(404, { error: 'not_found' });
+      return json(404, { error: 'not_found', requestId: currentRequestId }, currentRequestId);
     } catch (error) {
       const status = error instanceof LicenseServiceError ? error.status : 500;
       const code = error instanceof LicenseServiceError ? error.code : 'internal_error';
       if (status >= 500) console.error(error);
-      return json(status, { error: code });
+      if (status >= 500 && store) {
+        await safeAudit(store, 'server_error', '', request, { code, requestId: currentRequestId });
+      }
+      return json(status, { error: code, requestId: currentRequestId }, currentRequestId, {
+        retryAfterSeconds: error?.retryAfterSeconds,
+      });
     }
   },
+
+  async scheduled(_controller, env) {
+    const store = new D1LicenseStore(env.DB);
+    await store.cleanupOperationalData();
+  },
 };
+
+function serviceStatus(env, databaseOk, currentRequestId) {
+  return {
+    ok: Boolean(databaseOk),
+    service: 'price-monitor-license',
+    version: String(env.SERVICE_VERSION || 'unknown').slice(0, 40),
+    environment: safeEnvironment(env.ENVIRONMENT),
+    database: databaseOk ? 'ready' : 'unavailable',
+    recoveryDays: 7,
+    time: new Date().toISOString(),
+    requestId: currentRequestId,
+  };
+}
+
+async function enforceRateLimit(request, url, env, store) {
+  if (String(env.RATE_LIMITING_ENABLED || '').toLowerCase() !== 'true') return;
+  const policy = rateLimitPolicy(request.method, url.pathname);
+  if (!policy) return;
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const material = `${safeEnvironment(env.ENVIRONMENT)}|${policy.name}|${ip}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
+  const key = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const result = await store.consumeRateLimit({ key, ...policy });
+  if (result.allowed) return;
+  await safeAudit(store, 'rate_limited', '', request, {
+    route: policy.name,
+    retryAfterSeconds: result.retryAfterSeconds,
+  });
+  const error = new LicenseServiceError('rate_limited', 429);
+  error.retryAfterSeconds = result.retryAfterSeconds;
+  throw error;
+}
+
+async function safeAudit(store, type, licenseId, request, details = {}) {
+  try {
+    await store.appendEvent({
+      type,
+      licenseId: licenseId || '',
+      deviceId: String(details.deviceId || ''),
+      occurredAt: new Date().toISOString(),
+      ip: String(request?.headers?.get('CF-Connecting-IP') || '').slice(0, 100),
+      details,
+    });
+  } catch (_error) {
+    // Аудит не повинен ламати основну операцію.
+  }
+}
 
 async function readJson(request) {
   const length = Number(request.headers.get('content-length') || 0);
@@ -115,7 +195,8 @@ function constantTimeEqual(left, right) {
   return difference === 0;
 }
 
-function json(status, body) {
+function json(status, body, currentRequestId = '', options = {}) {
+  const retryAfterSeconds = Number(options.retryAfterSeconds);
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -123,6 +204,8 @@ function json(status, body) {
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'no-referrer',
+      ...(currentRequestId ? { 'x-request-id': currentRequestId } : {}),
+      ...(Number.isFinite(retryAfterSeconds) ? { 'retry-after': String(Math.max(1, Math.ceil(retryAfterSeconds))) } : {}),
     },
   });
 }
