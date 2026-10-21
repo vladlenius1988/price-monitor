@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.24.0');
+  assert.equal(packageJson.version, '4.24.1');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1606,6 +1606,21 @@ test('collects MAKEUP barcodes optionally and exports them as a separate text co
   assert.match(scraper, /defaultVariantId/);
   assert.match(main, /header\('Штрихкод'\)/);
   assert.match(main, /String\(product\.barcode \|\| ''\)/);
+});
+
+test('supports the current MAKEUP product cards while keeping the legacy markup compatible', () => {
+  const scraper = fs.readFileSync(path.join(__dirname, 'scraper.js'), 'utf8');
+  assert.match(scraper, /\[data-testid="product-tile"\], \.Products__card/);
+  assert.match(scraper, /button\.ProductCard__cart/);
+  assert.match(scraper, /state\.available.*state\.total.*доступних товарів/);
+  assert.match(scraper, /\.Price__priceCurrent/);
+  assert.match(scraper, /\.ProductCard__title/);
+});
+
+test('does not collapse an open client management panel during automatic refresh', () => {
+  const admin = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
+  assert.match(admin, /licenses\.querySelector\('\.client-actions\[open\]'\)/);
+  assert.match(admin, /if \(!isEditing && !hasOpenClient\) refresh\(\{ quiet: true \}\)/);
 });
 
 test('exports Notino promo prices with their conditions', () => {

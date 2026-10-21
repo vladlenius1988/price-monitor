@@ -55,7 +55,9 @@ telegramForm.addEventListener('submit', (event) => saveTelegram(event).catch(sho
 testTelegramButton.addEventListener('click', () => testTelegram().catch(showError));
 initializeOwner().catch(showError);
 setInterval(() => {
-  if (!document.activeElement?.matches('input,select,textarea')) refresh({ quiet: true }).catch(() => {});
+  const isEditing = document.activeElement?.matches('input,select,textarea');
+  const hasOpenClient = Boolean(licenses.querySelector('.client-actions[open]'));
+  if (!isEditing && !hasOpenClient) refresh({ quiet: true }).catch(() => {});
 }, 5000);
 
 async function initializeOwner() {

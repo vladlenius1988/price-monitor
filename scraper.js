@@ -569,20 +569,20 @@ class PriceScraper {
       progress({
         phase: 'loading',
         message: state.total
-          ? `Завантажено ${state.count} із ${state.total} товарів…`
-          : `Завантажено товарів: ${state.count}…`,
-        current: state.count, total: state.total, brand: match.name,
+          ? `Завантажено ${state.available} із ${state.total} доступних товарів…`
+          : `Завантажено доступних товарів: ${state.available}…`,
+        current: state.available, total: state.total, brand: match.name,
       });
 
-      if (!state.hasMore || (state.total && state.count >= state.total)) break;
+      if (!state.hasMore || (state.total && state.available >= state.total)) break;
       await browser.webContents.executeJavaScript(
-        `document.querySelector('.Products__pagination > button')?.click()`, true,
+        `document.querySelector('.Products__pagination > button, button.Products__pagination')?.click()`, true,
       );
 
       const grew = await waitFor(async () => {
         this.assertNotCancelled();
         const count = await browser.webContents.executeJavaScript(
-          `document.querySelectorAll('[data-testid="product-tile"]').length`, true,
+          `document.querySelectorAll('[data-testid="product-tile"], .Products__card').length`, true,
         );
         return count > state.count ? count : null;
       }, 25_000, false);
@@ -999,7 +999,7 @@ class PriceScraper {
     const selector = store === 'eva'
       ? '[data-testid="o-listing"] [data-testid="product-card-simple"], [data-testid="o-listing"] [data-testid="product-card-configurable"]'
       : store === 'makeup'
-        ? '[data-testid="product-tile"]'
+        ? '[data-testid="product-tile"], .Products__card'
       : store === 'notino'
           ? '[data-testid="product-container"] [data-testid="product-card-name"]'
         : store === 'rozetka'
@@ -1239,7 +1239,7 @@ function extractPage(store, fallbackBrand) {
       };
     });
   } else if (store === 'makeup') {
-    cards = [...document.querySelectorAll('[data-testid="product-tile"]')].map((card) => {
+    cards = [...document.querySelectorAll('[data-testid="product-tile"], .Products__card')].map((card) => {
       const nameElement = card.querySelector('.ProductCard__title');
       const title = clean(nameElement?.textContent);
       const subtitle = clean(card.querySelector('.ProductCard__subTitle')?.textContent);
@@ -1249,7 +1249,9 @@ function extractPage(store, fallbackBrand) {
       const currentPrice = price(card.querySelector('.Price__priceCurrent')?.textContent);
       const originalPrice = price(card.querySelector('.Price__priceOld')?.textContent);
       const onSale = originalPrice !== null && currentPrice !== null && originalPrice > currentPrice;
-      const buyButton = card.querySelector('button[data-testid="product-tile-buy-icon"]');
+      const buyButton = card.querySelector(
+        'button[data-testid="product-tile-buy-icon"], button.ProductCard__cart',
+      );
       const available = currentPrice !== null
         && Boolean(buyButton)
         && !buyButton.disabled
@@ -1830,11 +1832,15 @@ function extractEvaVariants(parentProduct) {
 }
 
 function makeupLoadState() {
-  const count = document.querySelectorAll('[data-testid="product-tile"]').length;
+  const cards = [...document.querySelectorAll('[data-testid="product-tile"], .Products__card')];
+  const count = cards.length;
+  const available = cards.filter((card) => card.querySelector(
+    'button[data-testid="product-tile-buy-icon"], button.ProductCard__cart',
+  )).length;
   const totalText = document.querySelector('.Products__total')?.textContent || '';
   const total = Number((totalText.match(/\d[\d\s]*/) || ['0'])[0].replace(/\s/g, '')) || 0;
   const button = document.querySelector('.Products__pagination > button');
-  return { count, total, hasMore: Boolean(button) };
+  return { count, available, total, hasMore: Boolean(button) };
 }
 
 function notinoLoadState() {
@@ -1926,7 +1932,7 @@ function catalogLoadState(store) {
   }
   if (store === 'makeup') {
     return {
-      cards: document.querySelectorAll('[data-testid="product-tile"]').length,
+      cards: document.querySelectorAll('[data-testid="product-tile"], .Products__card').length,
       priced: document.querySelectorAll('.Price__priceCurrent').length,
     };
   }
