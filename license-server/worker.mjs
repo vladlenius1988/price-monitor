@@ -1,5 +1,6 @@
 import corePackage from './server-core.js';
 import safetyPackage from './server-safety.js';
+import telemetryPackage from './telemetry.js';
 import { D1LicenseStore } from './d1-store.mjs';
 import { createActivationCode, createLicenseId, createWorkerCrypto } from './worker-crypto.mjs';
 
@@ -10,6 +11,7 @@ const {
   normalizeLicensePatch,
 } = corePackage;
 const { rateLimitPolicy, requestId, safeEnvironment } = safetyPackage;
+const { normalizeSearchTelemetry } = telemetryPackage;
 
 export default {
   async fetch(request, env) {
@@ -30,6 +32,21 @@ export default {
       }
       if (request.method === 'POST' && url.pathname === '/v1/licenses/check') {
         return json(200, await service.check(await readJson(request), context(request)), currentRequestId);
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/telemetry/search') {
+        const normalized = normalizeSearchTelemetry(await readJson(request));
+        if (!normalized.ok) throw new LicenseServiceError(normalized.reason, 400);
+        const metric = normalized.value;
+        const license = await store.findLicenseById(metric.licenseId);
+        if (!license) throw new LicenseServiceError('license_not_found', 404);
+        const device = await store.findDevice(metric.licenseId, metric.deviceId);
+        if (!device || device.status !== 'active') throw new LicenseServiceError('device_not_allowed', 403);
+        if (!license.stores.includes(metric.store)) throw new LicenseServiceError('store_not_allowed', 403);
+        const saved = await store.recordSearchMetric({
+          ...metric,
+          occurredAt: new Date().toISOString(),
+        });
+        return json(202, { accepted: true, duplicate: !saved.inserted }, currentRequestId);
       }
       if (url.pathname.startsWith('/admin/api/')) {
         requireAdmin(request, env.ADMIN_TOKEN);

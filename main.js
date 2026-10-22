@@ -209,6 +209,12 @@ function registerIpcHandlers() {
   ipcMain.handle('access:finish-search', (_event, payload = {}) => {
     return accessStore.finishSearch(payload.token);
   });
+  ipcMain.handle('telemetry:search', async (_event, payload = {}) => {
+    if (typeof accessStore.reportSearchTelemetry !== 'function') {
+      return { accepted: false, reason: 'not_configured' };
+    }
+    return accessStore.reportSearchTelemetry(payload);
+  });
 
   ipcMain.handle('updates:check', async () => {
     if (typeof accessStore.checkForUpdate !== 'function') return { checked: false, update: null, reason: 'not_configured' };

@@ -146,6 +146,7 @@ async function refresh({ quiet = false } = {}) {
     const data = await api('/admin/api/overview');
     renderService(data.service || {});
     renderSummary(data);
+    renderTelemetry(data.telemetry || {});
     renderAttention(data.licenses || []);
     renderLicenses(data.licenses || []);
     renderEvents(data.events || []);
@@ -183,6 +184,55 @@ function renderSummary(data) {
   document.getElementById('active-licenses').textContent = licenseItems.filter((item) => item.status === 'active').length;
   document.getElementById('active-devices').textContent = deviceItems.length;
   document.getElementById('event-count').textContent = Number(data.eventCount ?? (data.events || []).length);
+}
+
+function renderTelemetry(telemetry) {
+  const periods = telemetry.periods || {};
+  const month = periods.month || {};
+  document.getElementById('searches-day').textContent = Number(periods.day?.total) || 0;
+  document.getElementById('searches-week').textContent = Number(periods.week?.total) || 0;
+  document.getElementById('searches-month').textContent = Number(month.total) || 0;
+  document.getElementById('search-success-rate').textContent = `${Number(month.successRate) || 0}%`;
+
+  const stores = telemetry.byStore || [];
+  document.getElementById('telemetry-stores').innerHTML = stores.length
+    ? telemetryTable(stores, (item) => STORE_LABELS[item.store] || item.store)
+    : '<p>Даних ще немає.</p>';
+
+  const clients = telemetry.byLicense || [];
+  document.getElementById('telemetry-clients').innerHTML = clients.length
+    ? telemetryTable(clients, (item) => item.customerName || item.licenseId)
+    : '<p>Даних ще немає.</p>';
+
+  const errors = telemetry.recentErrors || [];
+  document.getElementById('telemetry-errors').innerHTML = errors.length
+    ? `<table><thead><tr><th>Час</th><th>Клієнт</th><th>Магазин</th><th>Причина</th><th>Версія</th></tr></thead><tbody>${errors.map((item) => `<tr><td>${escapeHtml(formatDateTime(item.occurredAt))}</td><td>${escapeHtml(item.customerName || item.licenseId)}</td><td>${escapeHtml(STORE_LABELS[item.store] || item.store)}</td><td class="metric-error">${escapeHtml(telemetryErrorLabel(item.errorCode))}</td><td>${escapeHtml(item.appVersion || '—')}</td></tr>`).join('')}</tbody></table>`
+    : '<p>Помилок не зафіксовано.</p>';
+}
+
+function telemetryTable(items, label) {
+  return `<table><thead><tr><th>Назва</th><th>Пошуки</th><th>Успішно</th><th>Середній час</th><th>Товарів</th><th>Останній</th></tr></thead><tbody>${items.map((item) => `<tr><td>${escapeHtml(label(item))}</td><td>${Number(item.total) || 0}</td><td class="${Number(item.successRate) >= 90 ? 'metric-success' : Number(item.total) ? 'metric-error' : ''}">${Number(item.successRate) || 0}%</td><td>${escapeHtml(formatDuration(item.averageDurationMs))}</td><td>${Number(item.productCount) || 0}</td><td>${escapeHtml(formatDateTime(item.lastSearchAt))}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function telemetryErrorLabel(code) {
+  return ({
+    catalog_unavailable: 'Каталог не завантажився',
+    no_results: 'Нічого не знайдено',
+    timeout: 'Перевищено час очікування',
+    network_error: 'Помилка мережі',
+    access_error: 'Помилка доступу',
+    search_error: 'Помилка пошуку',
+  })[code] || String(code || 'Невідома помилка');
+}
+
+function formatDuration(value) {
+  const milliseconds = Math.max(0, Number(value) || 0);
+  if (milliseconds < 1000) return '<1 с';
+  const seconds = Math.round(milliseconds / 1000);
+  if (seconds < 60) return `${seconds} с`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes} хв ${remainder} с` : `${minutes} хв`;
 }
 
 function renderLicenses(items) {

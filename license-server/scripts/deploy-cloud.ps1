@@ -29,6 +29,18 @@ try {
   Pop-Location
 }
 
-$health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 30
-if (-not $health.ok -or $health.database -ne 'ready') { throw 'Deployed server did not pass the database health check.' }
+$health = $null
+for ($attempt = 1; $attempt -le 4; $attempt++) {
+  try {
+    $candidate = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 30
+    if ($candidate.ok -and $candidate.database -eq 'ready') {
+      $health = $candidate
+      break
+    }
+  } catch {
+    if ($attempt -eq 4) { throw }
+  }
+  if ($attempt -lt 4) { Start-Sleep -Seconds 3 }
+}
+if (-not $health) { throw 'Deployed server did not pass the database health check after four attempts.' }
 Write-Host "Deployment verified: $($health.environment) $($health.version), database $($health.database)"

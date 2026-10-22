@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.24.1');
+  assert.equal(packageJson.version, '4.25.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1621,6 +1621,25 @@ test('does not collapse an open client management panel during automatic refresh
   const admin = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
   assert.match(admin, /licenses\.querySelector\('\.client-actions\[open\]'\)/);
   assert.match(admin, /if \(!isEditing && !hasOpenClient\) refresh\(\{ quiet: true \}\)/);
+});
+
+test('reports privacy-safe search telemetry and shows aggregates in the owner dashboard', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const ownerHtml = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.html'), 'utf8');
+  const owner = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
+  assert.match(html, /Торгова марка, пошуковий запит, назви товарів, ціни та штрихкоди не передаються/);
+  assert.match(renderer, /reportSearchTelemetry\(\{[\s\S]*?store: requestedStore[\s\S]*?productCount: state\.products\.length/);
+  assert.match(renderer, /function classifyTelemetryError/);
+  assert.match(preload, /reportSearchTelemetry: \(payload\) => ipcRenderer\.invoke\('telemetry:search'/);
+  assert.match(main, /ipcMain\.handle\('telemetry:search'/);
+  assert.match(ownerHtml, /id="searches-day"/);
+  assert.match(ownerHtml, /сервер не отримує торгові марки/);
+  assert.match(owner, /function renderTelemetry/);
+  assert.match(owner, /telemetry\.byStore/);
+  assert.match(owner, /telemetry\.byLicense/);
 });
 
 test('exports Notino promo prices with their conditions', () => {

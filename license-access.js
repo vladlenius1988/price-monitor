@@ -332,6 +332,54 @@ class LicensedAccessStore {
     }
   }
 
+  async reportSearchTelemetry(input = {}) {
+    const status = this.getStatus();
+    if (!status.allowed || !this.serverUrl || !this.licenseDocument || typeof this.fetchFn !== 'function') {
+      return { accepted: false, reason: status.blockedReason || 'not_configured' };
+    }
+    const store = String(input.store || '').trim().toLowerCase();
+    const outcome = String(input.outcome || '').trim().toLowerCase();
+    const durationMs = Math.max(0, Math.min(24 * 60 * 60 * 1000, Math.round(Number(input.durationMs) || 0)));
+    const productCount = Math.max(0, Math.min(1_000_000, Math.round(Number(input.productCount) || 0)));
+    const errorCode = String(input.errorCode || '').trim().toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+    if (!['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka'].includes(store)) {
+      return { accepted: false, reason: 'telemetry_store_invalid' };
+    }
+    if (!['success', 'error', 'cancelled'].includes(outcome)) {
+      return { accepted: false, reason: 'telemetry_outcome_invalid' };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await this.fetchFn(`${this.serverUrl}/v1/telemetry/search`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          eventId: randomUUID(),
+          licenseId: status.licenseId,
+          deviceId: this.deviceIdProvider(),
+          store,
+          outcome,
+          durationMs,
+          productCount,
+          appVersion: this.appVersion,
+          errorCode,
+        }),
+        signal: controller.signal,
+      });
+      const body = await safeJson(response);
+      return response?.ok && body?.accepted
+        ? { accepted: true, reason: '' }
+        : { accepted: false, reason: normalizeServerError(body?.error) };
+    } catch (_error) {
+      return { accepted: false, reason: 'server_unavailable' };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   resolveServerPath(relativePath) {
     if (!this.serverUrl || !/^\/v1\/updates\/download\/rel_[a-f0-9]+$/i.test(String(relativePath || ''))) return '';
     return `${this.serverUrl}${relativePath}`;

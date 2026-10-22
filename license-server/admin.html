@@ -65,9 +65,14 @@
     .server-card { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; }
     .server-card article { padding: 13px; border-radius: 11px; background: #f7f9fc; border: 1px solid #e1e7f0; }
     .server-card strong { display: block; margin-bottom: 5px; }
+    .telemetry-note { padding: 10px 12px; border-radius: 10px; background: #edf8f1; color: #21613e; }
+    .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    .telemetry-grid h3 { margin: 0 0 8px; }
+    .metric-success { color: #167149; }
+    .metric-error { color: #a12c24; }
     .environment-production { color: #21613e; }
     .environment-staging { color: #8a5a16; }
-    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .telemetry-grid { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -91,6 +96,23 @@
         <article><strong id="service-recovery">—</strong><span class="muted">хмарне відновлення</span></article>
       </div>
       <p class="muted" id="service-request">Ідентифікатор останньої перевірки: —</p>
+    </section>
+
+    <section>
+      <div class="section-heading"><div><h2>Використання та стабільність</h2><p>Агрегована статистика пошуків допомагає оцінити навантаження та швидко помітити проблемний магазин.</p></div></div>
+      <p class="telemetry-note">Приватність: сервер не отримує торгові марки, пошукові запити, назви товарів, ціни або штрихкоди.</p>
+      <div class="summary">
+        <article><strong id="searches-day">0</strong><span class="muted">пошуків за 24 години</span></article>
+        <article><strong id="searches-week">0</strong><span class="muted">пошуків за 7 днів</span></article>
+        <article><strong id="searches-month">0</strong><span class="muted">пошуків за 30 днів</span></article>
+        <article><strong id="search-success-rate">0%</strong><span class="muted">успішних за 30 днів</span></article>
+      </div>
+      <div class="telemetry-grid">
+        <div><h3>За магазинами · 30 днів</h3><div id="telemetry-stores" class="muted table-wrap">Даних ще немає.</div></div>
+        <div><h3>За клієнтами · 30 днів</h3><div id="telemetry-clients" class="muted table-wrap">Даних ще немає.</div></div>
+      </div>
+      <h3>Останні помилки · 30 днів</h3>
+      <div id="telemetry-errors" class="muted table-wrap">Помилок не зафіксовано.</div>
     </section>
 
     <section class="hero-section">

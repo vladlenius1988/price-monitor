@@ -10,7 +10,7 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
-        "SERVICE_VERSION": "4.24.0",
+        "SERVICE_VERSION": "4.25.0",
         "RATE_LIMITING_ENABLED": "false"
       },
       "d1_databases": [
@@ -28,7 +28,7 @@
       "preview_urls": false,
       "vars": {
         "ENVIRONMENT": "production",
-        "SERVICE_VERSION": "4.24.0",
+        "SERVICE_VERSION": "4.25.0",
         "RATE_LIMITING_ENABLED": "true"
       },
       "d1_databases": [

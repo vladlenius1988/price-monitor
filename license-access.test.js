@@ -187,6 +187,33 @@ test('server probe reports an unavailable endpoint without changing local access
   });
 });
 
+test('reports only privacy-safe search telemetry and never includes the query', async () => {
+  await withLicensedStore(async ({ create }) => {
+    let captured = null;
+    const store = create({
+      serverUrl: 'https://license.example.test',
+      appVersion: '4.25.0',
+      fetchFn: async (url, request) => {
+        captured = { url, body: JSON.parse(request.body) };
+        return { ok: true, json: async () => ({ accepted: true }) };
+      },
+    });
+    const result = await store.reportSearchTelemetry({
+      store: 'makeup', outcome: 'success', durationMs: 1200, productCount: 38,
+      errorCode: '', query: 'pop gossip', brand: 'Pop Gossip',
+    });
+    assert.deepEqual(result, { accepted: true, reason: '' });
+    assert.equal(captured.url, 'https://license.example.test/v1/telemetry/search');
+    assert.equal(captured.body.store, 'makeup');
+    assert.equal(captured.body.productCount, 38);
+    assert.equal(captured.body.appVersion, '4.25.0');
+    assert.equal(captured.body.deviceId, DEVICE_ID);
+    assert.equal('query' in captured.body, false);
+    assert.equal('brand' in captured.body, false);
+    assert.equal('products' in captured.body, false);
+  });
+});
+
 test('universal licensed build activates a clean computer without a bundled license', async () => {
   await withLicensedStore(async ({ create, privateKey, licensePath }) => {
     const online = signLicense(privateKey, {

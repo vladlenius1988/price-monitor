@@ -1,3 +1,7 @@
+import telemetryPackage from './telemetry.js';
+
+const { telemetrySummary } = telemetryPackage;
+
 export class D1LicenseStore {
   constructor(database) {
     if (!database) throw new Error('d1_database_required');
@@ -134,6 +138,94 @@ export class D1LicenseStore {
     ).run();
   }
 
+  async recordSearchMetric(record) {
+    const result = await this.db.prepare(`
+      INSERT OR IGNORE INTO search_metrics (
+        id, license_id, device_id, store, outcome, duration_ms,
+        product_count, app_version, error_code, occurred_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+    `).bind(
+      record.eventId,
+      record.licenseId,
+      record.deviceId,
+      record.store,
+      record.outcome,
+      record.durationMs,
+      record.productCount,
+      record.appVersion || '',
+      record.errorCode || '',
+      record.occurredAt,
+    ).run();
+    return { inserted: (Number(result?.meta?.changes) || 0) > 0 };
+  }
+
+  async searchTelemetryOverview(nowMs = Date.now()) {
+    const thresholds = {
+      day: new Date(nowMs - 24 * 60 * 60 * 1000).toISOString(),
+      week: new Date(nowMs - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      month: new Date(nowMs - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const [day, week, month, byStoreResult, byLicenseResult, errorResult] = await Promise.all([
+      this.searchMetricSummary(thresholds.day),
+      this.searchMetricSummary(thresholds.week),
+      this.searchMetricSummary(thresholds.month),
+      this.db.prepare(`
+        SELECT store, COUNT(*) AS total,
+          SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS success,
+          SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
+          SUM(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+          AVG(duration_ms) AS average_duration_ms,
+          SUM(product_count) AS product_count,
+          MAX(occurred_at) AS last_search_at
+        FROM search_metrics WHERE occurred_at >= ?1
+        GROUP BY store ORDER BY total DESC, store
+      `).bind(thresholds.month).all(),
+      this.db.prepare(`
+        SELECT metrics.license_id, licenses.customer_name, COUNT(*) AS total,
+          SUM(CASE WHEN metrics.outcome = 'success' THEN 1 ELSE 0 END) AS success,
+          SUM(CASE WHEN metrics.outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
+          SUM(CASE WHEN metrics.outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+          AVG(metrics.duration_ms) AS average_duration_ms,
+          SUM(metrics.product_count) AS product_count,
+          MAX(metrics.occurred_at) AS last_search_at
+        FROM search_metrics AS metrics
+        JOIN licenses ON licenses.id = metrics.license_id
+        WHERE metrics.occurred_at >= ?1
+        GROUP BY metrics.license_id, licenses.customer_name
+        ORDER BY total DESC, licenses.customer_name
+      `).bind(thresholds.month).all(),
+      this.db.prepare(`
+        SELECT metrics.id, metrics.license_id, licenses.customer_name, metrics.device_id,
+          metrics.store, metrics.error_code, metrics.app_version, metrics.duration_ms,
+          metrics.product_count, metrics.occurred_at
+        FROM search_metrics AS metrics
+        JOIN licenses ON licenses.id = metrics.license_id
+        WHERE metrics.outcome = 'error' AND metrics.occurred_at >= ?1
+        ORDER BY metrics.occurred_at DESC LIMIT 25
+      `).bind(thresholds.month).all(),
+    ]);
+    return {
+      periods: { day, week, month },
+      byStore: (byStoreResult.results || []).map(telemetryGroupFromRow),
+      byLicense: (byLicenseResult.results || []).map(telemetryGroupFromRow),
+      recentErrors: (errorResult.results || []).map(searchErrorFromRow),
+      privacy: 'no_queries_no_products',
+    };
+  }
+
+  async searchMetricSummary(since) {
+    const row = await this.db.prepare(`
+      SELECT COUNT(*) AS total,
+        SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS success,
+        SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
+        SUM(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+        AVG(duration_ms) AS average_duration_ms,
+        SUM(product_count) AS product_count
+      FROM search_metrics WHERE occurred_at >= ?1
+    `).bind(since).first();
+    return telemetrySummary(row);
+  }
+
   async health() {
     const row = await this.db.prepare('SELECT 1 AS ready').first();
     return { ok: Number(row?.ready) === 1 };
@@ -177,15 +269,25 @@ export class D1LicenseStore {
   }
 
   async cleanupOperationalData(now = new Date().toISOString()) {
-    const result = await this.db.prepare('DELETE FROM request_limits WHERE expires_at < ?1').bind(now).run();
-    return { removedRateLimits: Number(result?.meta?.changes) || 0 };
+    const metricsBefore = new Date(Date.parse(now) - 180 * 24 * 60 * 60 * 1000).toISOString();
+    const [limits, metrics] = await Promise.all([
+      this.db.prepare('DELETE FROM request_limits WHERE expires_at < ?1').bind(now).run(),
+      this.db.prepare('DELETE FROM search_metrics WHERE occurred_at < ?1').bind(metricsBefore).run(),
+    ]);
+    return {
+      removedRateLimits: Number(limits?.meta?.changes) || 0,
+      removedSearchMetrics: Number(metrics?.meta?.changes) || 0,
+    };
   }
 
   async overview() {
     const licenses = await this.listLicenses();
-    const devicesResult = await this.db.prepare('SELECT * FROM devices ORDER BY last_seen_at DESC').all();
-    const eventsResult = await this.db.prepare('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 100').all();
-    const eventCountRow = await this.db.prepare('SELECT COUNT(*) AS total FROM events').first();
+    const [devicesResult, eventsResult, eventCountRow, telemetry] = await Promise.all([
+      this.db.prepare('SELECT * FROM devices ORDER BY last_seen_at DESC').all(),
+      this.db.prepare('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 100').all(),
+      this.db.prepare('SELECT COUNT(*) AS total FROM events').first(),
+      this.searchTelemetryOverview(),
+    ]);
     const devices = (devicesResult.results || []).map(deviceFromRow);
     return {
       licenses: licenses.map(({ activationHash: _activationHash, ...license }) => ({
@@ -194,8 +296,34 @@ export class D1LicenseStore {
       })),
       events: (eventsResult.results || []).map(eventFromRow),
       eventCount: Number(eventCountRow?.total) || 0,
+      telemetry,
     };
   }
+}
+
+function telemetryGroupFromRow(row) {
+  return {
+    ...(row.store ? { store: row.store } : {}),
+    ...(row.license_id ? { licenseId: row.license_id } : {}),
+    ...(row.customer_name ? { customerName: row.customer_name } : {}),
+    ...telemetrySummary(row),
+    lastSearchAt: row.last_search_at || '',
+  };
+}
+
+function searchErrorFromRow(row) {
+  return {
+    id: row.id,
+    licenseId: row.license_id,
+    customerName: row.customer_name,
+    deviceId: row.device_id,
+    store: row.store,
+    errorCode: row.error_code,
+    appVersion: row.app_version,
+    durationMs: Number(row.duration_ms) || 0,
+    productCount: Number(row.product_count) || 0,
+    occurredAt: row.occurred_at,
+  };
 }
 
 function licenseFromRow(row) {

@@ -41,3 +41,15 @@ test('operational safety migration adds durable rate limits and event indexes', 
     assert.match(source, /idx_events_type_time/);
   }
 });
+
+test('search telemetry schema is deduplicated, bounded and indexed without query fields', () => {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, 'migrations', '0003_search_telemetry.sql'), 'utf8');
+  for (const source of [schema, migration]) {
+    const table = source.match(/CREATE TABLE IF NOT EXISTS search_metrics[\s\S]*?\n\);/)?.[0] || '';
+    assert.match(table, /CREATE TABLE IF NOT EXISTS search_metrics/);
+    assert.match(table, /id TEXT PRIMARY KEY/);
+    assert.match(source, /idx_search_metrics_license_time/);
+    assert.doesNotMatch(table, /search_query|brand_name|product_name|barcode/);
+  }
+});

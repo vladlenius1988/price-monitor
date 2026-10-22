@@ -7,6 +7,9 @@ test('assigns conservative limits only to known public and owner routes', () => 
     name: 'activation', limit: 30, windowSeconds: 900,
   });
   assert.equal(rateLimitPolicy('GET', '/v1/licenses/activate'), null);
+  assert.deepEqual(rateLimitPolicy('POST', '/v1/telemetry/search'), {
+    name: 'telemetry', limit: 600, windowSeconds: 3600,
+  });
   assert.equal(rateLimitPolicy('GET', '/unrelated'), null);
   assert.equal(rateLimitPolicy('PATCH', '/admin/api/licenses/lic_1').name, 'admin');
 });

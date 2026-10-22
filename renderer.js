@@ -1814,6 +1814,17 @@ function looksLikeBarcodeInput(value) {
   return /^\d+$/.test(compact) && [8, 12, 13, 14].includes(compact.length);
 }
 
+function classifyTelemetryError(value) {
+  const message = String(value?.message || value || '').toLocaleLowerCase('uk-UA');
+  if (/скас|зупин|cancel/.test(message)) return 'cancelled';
+  if (/каталог не завантаж|catalog/.test(message)) return 'catalog_unavailable';
+  if (/не знайден|нічого не знайден|no products/.test(message)) return 'no_results';
+  if (/timeout|час очікування|надто довго/.test(message)) return 'timeout';
+  if (/network|мереж|err_connection|err_name|err_internet/.test(message)) return 'network_error';
+  if (/доступ|ліценз|license/.test(message)) return 'access_error';
+  return 'search_error';
+}
+
 async function startParsing() {
   if (!parserAvailable) return showLaunchHint();
   const queries = batchUtils.splitBrandQueries(brandInput.value);
@@ -1848,6 +1859,9 @@ async function startParsing() {
   pendingStore = null;
   setControlsBusy(true);
   const requestedStore = state.store;
+  const telemetryStartedAt = Date.now();
+  let telemetryOutcome = 'error';
+  let telemetryErrorCode = 'search_error';
   const barcodeSearch = requestedStore === 'makeup' && queries.some(looksLikeBarcodeInput);
   const includeVariants = ['eva', 'makeup', 'notino', 'aurora'].includes(requestedStore) && variantsCheckbox.checked;
   const includeSellers = requestedStore === 'rozetka' && sellersCheckbox.checked;
@@ -1919,6 +1933,12 @@ async function startParsing() {
         },
       },
     );
+    telemetryOutcome = result.stopped
+      ? 'cancelled'
+      : result.successes.length ? 'success' : 'error';
+    telemetryErrorCode = result.stopped
+      ? 'user_cancelled'
+      : result.failures.length ? classifyTelemetryError(result.failures[0]?.message) : '';
     if (pendingStore || requestedStore !== state.store) return;
     state.products = result.products;
     state.brand = result.successes.map((item) => item.brand).join(', ') || queries.join(', ');
@@ -1992,11 +2012,26 @@ async function startParsing() {
       historyOptions,
     );
   } catch (error) {
+    telemetryOutcome = state.cancelRequested || pendingStore ? 'cancelled' : 'error';
+    telemetryErrorCode = telemetryOutcome === 'cancelled' ? 'user_cancelled' : classifyTelemetryError(error);
     if (!pendingStore) {
       setStatus(batchUtils.cleanParserError(error), 'error');
       recordSearchHistory(searchQuery, state.products.length, 'error', historyOptions);
     }
   } finally {
+    if (pendingStore || requestedStore !== state.store || state.cancelRequested) {
+      telemetryOutcome = 'cancelled';
+      telemetryErrorCode = pendingStore ? 'store_switched' : 'user_cancelled';
+    }
+    if (typeof parserApi?.reportSearchTelemetry === 'function') {
+      parserApi.reportSearchTelemetry({
+        store: requestedStore,
+        outcome: telemetryOutcome,
+        durationMs: Date.now() - telemetryStartedAt,
+        productCount: state.products.length,
+        errorCode: telemetryErrorCode,
+      }).catch(() => {});
+    }
     if (accessToken && typeof parserApi?.finishSearchAccess === 'function') {
       try {
         const finished = await parserApi.finishSearchAccess(accessToken);

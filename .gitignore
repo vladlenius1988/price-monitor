@@ -5,6 +5,7 @@ release-demo/
 release-licensed/
 release-*/
 tmp/
+.wrangler/
 .license-private/
 .codex-*/
 FM26_EXPORTER/

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('priceParser', {
   importLicense: () => ipcRenderer.invoke('access:import-license'),
   beginSearchAccess: (store, brandCount) => ipcRenderer.invoke('access:begin-search', { store, brandCount }),
   finishSearchAccess: (token) => ipcRenderer.invoke('access:finish-search', { token }),
+  reportSearchTelemetry: (payload) => ipcRenderer.invoke('telemetry:search', payload),
   checkForUpdate: () => ipcRenderer.invoke('updates:check'),
   installUpdate: (releaseId) => ipcRenderer.invoke('updates:download-install', { releaseId }),
   suggestBrands: (store, query) => ipcRenderer.invoke('brands:suggest', { store, query }),
