@@ -21,6 +21,7 @@ files:
   - result-view.js
   - demo-access.js
   - license-access.js
+  - diagnostic-report.js
   - device-identity.js
   - license-public-production.pem
   - renderer.js

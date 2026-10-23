@@ -1042,13 +1042,14 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.25.0');
+  assert.equal(packageJson.version, '4.26.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
   assert.ok(packageJson.build.files.includes('result-view.js'));
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
+  assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
   assert.deepEqual(packageJson.build.win.target, ['nsis']);
 });
 
@@ -1640,6 +1641,22 @@ test('reports privacy-safe search telemetry and shows aggregates in the owner da
   assert.match(owner, /function renderTelemetry/);
   assert.match(owner, /telemetry\.byStore/);
   assert.match(owner, /telemetry\.byLicense/);
+});
+
+test('exports a privacy-safe diagnostic report from the installed client', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const productionConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.production-client.yml'), 'utf8');
+  assert.match(html, /id="save-diagnostics"/);
+  assert.match(html, /не містить пошукових запитів, брендів, товарів, цін або штрихкодів/);
+  assert.match(renderer, /recordDiagnosticEvent\(\{[\s\S]*?area: 'search'[\s\S]*?code: telemetryErrorCode/);
+  assert.match(renderer, /parserApi\.exportDiagnostics\(\)/);
+  assert.match(preload, /exportDiagnostics: \(\) => ipcRenderer\.invoke\('diagnostics:export'\)/);
+  assert.match(main, /ipcMain\.handle\('diagnostics:export'/);
+  assert.match(main, /DiagnosticEventStore\(path\.join\(app\.getPath\('userData'\), 'diagnostic-events\.json'\)\)/);
+  assert.match(productionConfig, /- diagnostic-report\.js/);
 });
 
 test('exports Notino promo prices with their conditions', () => {

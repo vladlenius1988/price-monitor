@@ -105,6 +105,7 @@ const missingProductsList = document.getElementById('missing-products-list');
 const showCapabilitiesButton = document.getElementById('show-capabilities');
 const capabilitiesDialog = document.getElementById('capabilities-dialog');
 const showGuideButton = document.getElementById('show-guide');
+const saveDiagnosticsButton = document.getElementById('save-diagnostics');
 const guideDialog = document.getElementById('guide-dialog');
 const guideSearch = document.getElementById('guide-search');
 const guideClearSearch = document.getElementById('guide-clear-search');
@@ -265,6 +266,7 @@ exportSavedListsButton.addEventListener('click', exportSavedLists);
 importSavedListsButton.addEventListener('click', importSavedLists);
 clearSearchHistoryButton.addEventListener('click', clearStoreSearchHistory);
 showGuideButton.addEventListener('click', openGuide);
+saveDiagnosticsButton.addEventListener('click', exportDiagnostics);
 guideSearch.addEventListener('input', filterGuideSections);
 guideClearSearch.addEventListener('click', () => {
   guideSearch.value = '';
@@ -323,6 +325,9 @@ savedListName.addEventListener('keydown', (event) => {
     saveCurrentList();
   }
 });
+
+window.addEventListener('error', () => recordDiagnosticEvent({ area: 'app', outcome: 'error', code: 'renderer_error' }));
+window.addEventListener('unhandledrejection', () => recordDiagnosticEvent({ area: 'app', outcome: 'error', code: 'unhandled_rejection' }));
 
 renderSavedLists();
 renderSearchHistory();
@@ -436,6 +441,7 @@ async function refreshLicenseNow() {
     if (result?.status) updateAccessUi(result.status);
     if (!result?.checked && ['license_missing', 'license_invalid'].includes(result?.reason)) {
       const probe = await parserApi.probeLicenseServer?.();
+      if (!probe?.available) recordDiagnosticEvent({ area: 'server', outcome: 'warning', code: 'server_unavailable' });
       licenseRefreshStatus.textContent = probe?.available
         ? 'Сервер доступний. Для першого запуску введіть код активації.'
         : 'Сервер недоступний. Чинний автономний допуск збережено.';
@@ -448,8 +454,12 @@ async function refreshLicenseNow() {
         : result?.checked
           ? licenseActionError(result.reason)
           : 'Онлайн-перевірка недоступна.';
+    if (result?.reason === 'server_unavailable') {
+      recordDiagnosticEvent({ area: 'server', outcome: 'warning', code: 'server_unavailable' });
+    }
   } catch (_error) {
     licenseRefreshStatus.textContent = 'Не вдалося зв’язатися із сервером.';
+    recordDiagnosticEvent({ area: 'server', outcome: 'error', code: 'server_check_failed' });
   } finally {
     refreshLicenseButton.disabled = false;
   }
@@ -2032,6 +2042,14 @@ async function startParsing() {
         errorCode: telemetryErrorCode,
       }).catch(() => {});
     }
+    if (telemetryOutcome === 'error') {
+      recordDiagnosticEvent({
+        area: 'search',
+        store: requestedStore,
+        outcome: 'error',
+        code: telemetryErrorCode,
+      });
+    }
     if (accessToken && typeof parserApi?.finishSearchAccess === 'function') {
       try {
         const finished = await parserApi.finishSearchAccess(accessToken);
@@ -2416,6 +2434,7 @@ function updateResultMeta(processed, total) {
 function setControlsBusy(busy) {
   showArchiveButton.disabled = busy;
   showChangeReportButton.disabled = busy;
+  saveDiagnosticsButton.disabled = busy;
   document.querySelectorAll('.product-history-button').forEach((button) => { button.disabled = busy; });
   parseButton.hidden = busy;
   parseButton.disabled = busy || isAccessBlocked();
@@ -2430,6 +2449,34 @@ function setControlsBusy(busy) {
   saveCurrentListButton.disabled = busy;
   updateSavedListButtons();
   renderSearchHistory();
+}
+
+function recordDiagnosticEvent(event) {
+  if (typeof parserApi?.recordDiagnosticEvent !== 'function') return;
+  parserApi.recordDiagnosticEvent(event).catch(() => {});
+}
+
+async function exportDiagnostics() {
+  if (!parserAvailable || typeof parserApi?.exportDiagnostics !== 'function') return showLaunchHint();
+  if (state.parsing) return;
+  saveDiagnosticsButton.disabled = true;
+  setStatus('Перевіряю ліцензію, сервер і технічний журнал…', 'loading');
+  try {
+    const result = await parserApi.exportDiagnostics();
+    if (result?.saved) {
+      setStatus(`Діагностику збережено: ${result.filePath}. Передайте файл власнику Price Monitor.`, 'success');
+    } else if (result?.canceled) {
+      setStatus('Збереження діагностики скасовано.', 'idle');
+    } else {
+      setStatus('Не вдалося сформувати діагностичний файл.', 'error');
+      recordDiagnosticEvent({ area: 'storage', outcome: 'error', code: 'diagnostic_export_failed' });
+    }
+  } catch (_error) {
+    setStatus('Не вдалося сформувати діагностичний файл.', 'error');
+    recordDiagnosticEvent({ area: 'storage', outcome: 'error', code: 'diagnostic_export_failed' });
+  } finally {
+    saveDiagnosticsButton.disabled = state.parsing;
+  }
 }
 
 function setStatus(message, type) {

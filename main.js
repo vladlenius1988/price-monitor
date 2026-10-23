@@ -1,6 +1,7 @@
 const { app, BrowserWindow, clipboard, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { randomUUID, createHash } = require('crypto');
 const packageInfo = require('./package.json');
 const writeExcelFileModule = require('write-excel-file/node');
@@ -15,6 +16,7 @@ const { buildCombinedArchiveWorkbook, buildFilteredArchiveWorkbook } = require('
 const { buildCrossStoreChangeReport, buildChangeReportWorkbook } = require('./change-report');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
+const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
 
 const requestedEdition = String(process.env.PRICE_MONITOR_EDITION || packageInfo.priceMonitorEdition || 'full');
 const APP_EDITION = ['demo', 'licensed'].includes(requestedEdition) ? requestedEdition : 'full';
@@ -65,6 +67,7 @@ let accessStore = new DemoAccessStore({ edition: 'full' });
 let licenseCheckTimer = null;
 let latestUpdateDocument = null;
 let lastAutomaticUpdateCheckAt = 0;
+let diagnosticStore = null;
 
 function debugRenderer(message) {
   const argument = process.argv.find((value) => value.startsWith('--debug-log='));
@@ -214,6 +217,50 @@ function registerIpcHandlers() {
       return { accepted: false, reason: 'not_configured' };
     }
     return accessStore.reportSearchTelemetry(payload);
+  });
+
+  ipcMain.handle('diagnostics:record', async (_event, payload = {}) => {
+    if (!diagnosticStore) return { recorded: false };
+    try {
+      const event = await diagnosticStore.add(payload);
+      return { recorded: true, event };
+    } catch (_error) {
+      return { recorded: false };
+    }
+  });
+  ipcMain.handle('diagnostics:export', async () => {
+    const access = accessStore.getStatus();
+    const server = typeof accessStore.probeServer === 'function'
+      ? await accessStore.probeServer().catch(() => ({ checked: true, available: false, reason: 'server_unavailable' }))
+      : { checked: false, available: false, reason: 'not_configured' };
+    const events = diagnosticStore ? await diagnosticStore.list() : [];
+    const report = buildDiagnosticReport({
+      appInfo: {
+        name: editionSettings.name,
+        version: app.getVersion(),
+        edition: APP_EDITION,
+      },
+      system: {
+        platform: process.platform,
+        release: os.release(),
+        arch: process.arch,
+        locale: app.getLocale?.() || '',
+      },
+      access,
+      server,
+      supportedStores: Object.keys(STORES),
+      events,
+    });
+    const deviceCode = access.deviceCode || 'пристрій';
+    const date = new Date().toISOString().slice(0, 10);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Зберегти діагностику Price Monitor',
+      defaultPath: `Price-Monitor-діагностика-${deviceCode}-${date}.json`,
+      filters: [{ name: 'Діагностика Price Monitor', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false, canceled: true, filePath: '' };
+    await fs.promises.writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    return { saved: true, canceled: false, filePath: result.filePath, server: report.server };
   });
 
   ipcMain.handle('updates:check', async () => {
@@ -708,6 +755,7 @@ if (!hasSingleInstanceLock) {
     });
     comparisonStore = new ComparisonStore(path.join(app.getPath('userData'), 'price-comparisons.json'));
     archiveStore = new ArchiveStore(path.join(app.getPath('userData'), 'monitoring-archive.json'));
+    diagnosticStore = new DiagnosticEventStore(path.join(app.getPath('userData'), 'diagnostic-events.json'));
     registerIpcHandlers();
     createMainWindow();
     const liveIntervalMs = Number(packageInfo.priceMonitorLiveLicenseIntervalMs) || 0;
