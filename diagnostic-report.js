@@ -8,6 +8,7 @@ const DIAGNOSTIC_CODES = new Set([
   'access_error',
   'catalog_unavailable',
   'diagnostic_export_failed',
+  'diagnostic_sent',
   'network_error',
   'no_results',
   'renderer_error',

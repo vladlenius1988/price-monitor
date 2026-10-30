@@ -53,3 +53,15 @@ test('search telemetry schema is deduplicated, bounded and indexed without query
     assert.doesNotMatch(table, /search_query|brand_name|product_name|barcode/);
   }
 });
+
+test('support diagnostics schema stores only bounded technical data without commercial fields', () => {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, 'migrations', '0004_support_diagnostics.sql'), 'utf8');
+  for (const source of [schema, migration]) {
+    const table = source.match(/CREATE TABLE IF NOT EXISTS support_diagnostics[\s\S]*?\n\);/)?.[0] || '';
+    assert.match(table, /repeat_count INTEGER/);
+    assert.match(table, /status TEXT NOT NULL/);
+    assert.match(source, /idx_support_fingerprint/);
+    assert.doesNotMatch(table, /search_query|brand_name|product_name|price|barcode|ean|gtin/i);
+  }
+});

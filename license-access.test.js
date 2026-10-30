@@ -214,6 +214,35 @@ test('reports only privacy-safe search telemetry and never includes the query', 
   });
 });
 
+test('sends only privacy-safe support diagnostics and returns the case number', async () => {
+  await withLicensedStore(async ({ create }) => {
+    let captured = null;
+    const store = create({
+      serverUrl: 'https://license.example.test',
+      appVersion: '4.27.0',
+      fetchFn: async (url, request) => {
+        captured = { url, body: JSON.parse(request.body) };
+        return { ok: true, json: async () => ({ accepted: true, caseId: 'case-1', repeated: true, repeatCount: 2 }) };
+      },
+    });
+    const result = await store.reportSupportDiagnostic({
+      generatedAt: '2026-10-30T10:00:00.000Z',
+      system: { platform: 'win32', release: '10.0.19045', arch: 'x64', locale: 'uk-UA' },
+      access: { allowed: true, onlineConfigured: true, stores: ['makeup'], query: 'must not leave client' },
+      server: { checked: true, available: true, reason: '' },
+      recentEvents: [{ at: '2026-10-30T09:59:00.000Z', area: 'search', outcome: 'error', code: 'catalog_unavailable', store: 'makeup' }],
+    });
+    assert.deepEqual(result, { accepted: true, reason: '', caseId: 'case-1', repeated: true, repeatCount: 2 });
+    assert.equal(captured.url, 'https://license.example.test/v1/support/diagnostics');
+    assert.equal(captured.body.appVersion, '4.27.0');
+    assert.equal(captured.body.deviceId, DEVICE_ID);
+    assert.deepEqual(captured.body.stores, ['makeup']);
+    assert.equal(JSON.stringify(captured.body).includes('must not leave client'), false);
+    assert.equal('query' in captured.body, false);
+    assert.equal('customerName' in captured.body, false);
+  });
+});
+
 test('universal licensed build activates a clean computer without a bundled license', async () => {
   await withLicensedStore(async ({ create, privateKey, licensePath }) => {
     const online = signLicense(privateKey, {

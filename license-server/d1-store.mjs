@@ -159,6 +159,79 @@ export class D1LicenseStore {
     return { inserted: (Number(result?.meta?.changes) || 0) > 0 };
   }
 
+  async recordSupportDiagnostic(record) {
+    const duplicate = await this.findSupportDiagnostic(record.reportId);
+    if (duplicate) return { inserted: false, repeated: false, item: duplicate };
+    const existing = supportDiagnosticFromRow(await this.db.prepare(`
+      SELECT diagnostics.*, licenses.customer_name, devices.label AS device_label
+      FROM support_diagnostics AS diagnostics
+      JOIN licenses ON licenses.id = diagnostics.license_id
+      LEFT JOIN devices ON devices.license_id = diagnostics.license_id AND devices.device_id = diagnostics.device_id
+      WHERE diagnostics.license_id = ?1 AND diagnostics.device_id = ?2
+        AND diagnostics.fingerprint = ?3 AND diagnostics.status = 'open'
+      ORDER BY diagnostics.last_seen_at DESC LIMIT 1
+    `).bind(record.licenseId, record.deviceId, record.fingerprint).first());
+    if (existing) {
+      const severity = severityRank(record.severity) > severityRank(existing.severity) ? record.severity : existing.severity;
+      await this.db.prepare(`
+        UPDATE support_diagnostics SET
+          severity = ?2, app_version = ?3, app_edition = ?4, generated_at = ?5,
+          system_json = ?6, access_json = ?7, server_json = ?8, stores_json = ?9,
+          events_json = ?10, last_seen_at = ?11, repeat_count = repeat_count + 1
+        WHERE id = ?1
+      `).bind(
+        existing.id, severity, record.appVersion, record.appEdition, record.generatedAt,
+        JSON.stringify(record.system), JSON.stringify(record.access), JSON.stringify(record.server),
+        JSON.stringify(record.stores), JSON.stringify(record.events), record.receivedAt,
+      ).run();
+      return { inserted: false, repeated: true, item: await this.findSupportDiagnostic(existing.id) };
+    }
+    await this.db.prepare(`
+      INSERT INTO support_diagnostics (
+        id, license_id, device_id, fingerprint, status, severity, app_version, app_edition,
+        generated_at, system_json, access_json, server_json, stores_json, events_json,
+        first_seen_at, last_seen_at, repeat_count, resolved_at
+      ) VALUES (?1, ?2, ?3, ?4, 'open', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, 1, '')
+    `).bind(
+      record.reportId, record.licenseId, record.deviceId, record.fingerprint, record.severity,
+      record.appVersion, record.appEdition, record.generatedAt, JSON.stringify(record.system),
+      JSON.stringify(record.access), JSON.stringify(record.server), JSON.stringify(record.stores),
+      JSON.stringify(record.events), record.receivedAt,
+    ).run();
+    return { inserted: true, repeated: false, item: await this.findSupportDiagnostic(record.reportId) };
+  }
+
+  async findSupportDiagnostic(id) {
+    return supportDiagnosticFromRow(await this.db.prepare(`
+      SELECT diagnostics.*, licenses.customer_name, devices.label AS device_label
+      FROM support_diagnostics AS diagnostics
+      JOIN licenses ON licenses.id = diagnostics.license_id
+      LEFT JOIN devices ON devices.license_id = diagnostics.license_id AND devices.device_id = diagnostics.device_id
+      WHERE diagnostics.id = ?1
+    `).bind(id).first());
+  }
+
+  async listSupportDiagnostics() {
+    const result = await this.db.prepare(`
+      SELECT diagnostics.*, licenses.customer_name, devices.label AS device_label
+      FROM support_diagnostics AS diagnostics
+      JOIN licenses ON licenses.id = diagnostics.license_id
+      LEFT JOIN devices ON devices.license_id = diagnostics.license_id AND devices.device_id = diagnostics.device_id
+      ORDER BY CASE diagnostics.status WHEN 'open' THEN 0 ELSE 1 END, diagnostics.last_seen_at DESC
+      LIMIT 200
+    `).all();
+    return (result.results || []).map(supportDiagnosticFromRow);
+  }
+
+  async updateSupportDiagnostic(id, status) {
+    if (!['open', 'resolved'].includes(status)) return null;
+    const resolvedAt = status === 'resolved' ? new Date().toISOString() : '';
+    await this.db.prepare(`
+      UPDATE support_diagnostics SET status = ?2, resolved_at = ?3 WHERE id = ?1
+    `).bind(id, status, resolvedAt).run();
+    return this.findSupportDiagnostic(id);
+  }
+
   async searchTelemetryOverview(nowMs = Date.now()) {
     const thresholds = {
       day: new Date(nowMs - 24 * 60 * 60 * 1000).toISOString(),
@@ -270,23 +343,26 @@ export class D1LicenseStore {
 
   async cleanupOperationalData(now = new Date().toISOString()) {
     const metricsBefore = new Date(Date.parse(now) - 180 * 24 * 60 * 60 * 1000).toISOString();
-    const [limits, metrics] = await Promise.all([
+    const [limits, metrics, diagnostics] = await Promise.all([
       this.db.prepare('DELETE FROM request_limits WHERE expires_at < ?1').bind(now).run(),
       this.db.prepare('DELETE FROM search_metrics WHERE occurred_at < ?1').bind(metricsBefore).run(),
+      this.db.prepare("DELETE FROM support_diagnostics WHERE status = 'resolved' AND resolved_at < ?1").bind(metricsBefore).run(),
     ]);
     return {
       removedRateLimits: Number(limits?.meta?.changes) || 0,
       removedSearchMetrics: Number(metrics?.meta?.changes) || 0,
+      removedSupportDiagnostics: Number(diagnostics?.meta?.changes) || 0,
     };
   }
 
   async overview() {
     const licenses = await this.listLicenses();
-    const [devicesResult, eventsResult, eventCountRow, telemetry] = await Promise.all([
+    const [devicesResult, eventsResult, eventCountRow, telemetry, support] = await Promise.all([
       this.db.prepare('SELECT * FROM devices ORDER BY last_seen_at DESC').all(),
       this.db.prepare('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 100').all(),
       this.db.prepare('SELECT COUNT(*) AS total FROM events').first(),
       this.searchTelemetryOverview(),
+      this.listSupportDiagnostics(),
     ]);
     const devices = (devicesResult.results || []).map(deviceFromRow);
     return {
@@ -297,8 +373,44 @@ export class D1LicenseStore {
       events: (eventsResult.results || []).map(eventFromRow),
       eventCount: Number(eventCountRow?.total) || 0,
       telemetry,
+      support,
     };
   }
+}
+
+function supportDiagnosticFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    licenseId: row.license_id,
+    customerName: row.customer_name || '',
+    deviceId: row.device_id,
+    deviceCode: deviceCode(row.device_id),
+    deviceLabel: row.device_label || '',
+    fingerprint: row.fingerprint,
+    status: row.status,
+    severity: row.severity,
+    appVersion: row.app_version,
+    appEdition: row.app_edition,
+    generatedAt: row.generated_at,
+    system: parseJson(row.system_json, {}),
+    access: parseJson(row.access_json, {}),
+    server: parseJson(row.server_json, {}),
+    stores: parseJson(row.stores_json, []),
+    events: parseJson(row.events_json, []),
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    repeatCount: Math.max(1, Number(row.repeat_count) || 1),
+    resolvedAt: row.resolved_at || '',
+  };
+}
+
+function severityRank(value) {
+  return { info: 1, warning: 2, error: 3 }[value] || 0;
+}
+
+function deviceCode(value) {
+  return String(value || '').slice(0, 16).toUpperCase().match(/.{1,4}/g)?.join('-') || '';
 }
 
 function telemetryGroupFromRow(row) {

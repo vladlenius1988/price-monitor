@@ -380,6 +380,65 @@ class LicensedAccessStore {
     }
   }
 
+  async reportSupportDiagnostic(report = {}) {
+    const status = this.getStatus();
+    if (!status.licenseId || !this.serverUrl || !this.licenseDocument || typeof this.fetchFn !== 'function') {
+      return { accepted: false, reason: status.blockedReason || 'not_configured' };
+    }
+    const payload = {
+      reportId: randomUUID(),
+      licenseId: status.licenseId,
+      deviceId: this.deviceIdProvider(),
+      appVersion: this.appVersion,
+      appEdition: 'licensed',
+      generatedAt: String(report.generatedAt || new Date(this.nowMs()).toISOString()),
+      system: {
+        platform: String(report.system?.platform || ''),
+        release: String(report.system?.release || ''),
+        arch: String(report.system?.arch || ''),
+        locale: String(report.system?.locale || ''),
+      },
+      access: {
+        allowed: Boolean(report.access?.allowed),
+        blockedReason: String(report.access?.blockedReason || ''),
+        onlineConfigured: Boolean(report.access?.onlineConfigured),
+        expiresAt: String(report.access?.expiresAt || ''),
+        lastOnlineSuccessAt: String(report.access?.lastOnlineSuccessAt || ''),
+      },
+      server: {
+        checked: Boolean(report.server?.checked),
+        available: Boolean(report.server?.available),
+        reason: String(report.server?.reason || ''),
+      },
+      stores: Array.isArray(report.access?.stores) ? report.access.stores : [],
+      events: Array.isArray(report.recentEvents) ? report.recentEvents : [],
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await this.fetchFn(`${this.serverUrl}/v1/support/diagnostics`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const body = await safeJson(response);
+      return response?.ok && body?.accepted
+        ? {
+          accepted: true,
+          reason: '',
+          caseId: String(body.caseId || ''),
+          repeated: Boolean(body.repeated),
+          repeatCount: Math.max(1, Number(body.repeatCount) || 1),
+        }
+        : { accepted: false, reason: normalizeServerError(body?.error) };
+    } catch (_error) {
+      return { accepted: false, reason: 'server_unavailable' };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   resolveServerPath(relativePath) {
     if (!this.serverUrl || !/^\/v1\/updates\/download\/rel_[a-f0-9]+$/i.test(String(relativePath || ''))) return '';
     return `${this.serverUrl}${relativePath}`;

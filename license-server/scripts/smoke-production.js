@@ -17,7 +17,7 @@ async function main() {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-admin-token': token },
     body: JSON.stringify({
-      customerName: 'SYSTEM SMOKE TEST 4.25.0',
+      customerName: 'SYSTEM SMOKE TEST 4.27.0',
       paidUntil: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       maxDevices: 1,
       leaseDays: 1,
@@ -34,7 +34,7 @@ async function main() {
       deviceId: 'f'.repeat(64),
       installationId: 'production-smoke-installation',
       deviceLabel: 'SMOKE-TEST',
-      appVersion: '4.25.0',
+      appVersion: '4.27.0',
     }),
   });
   const validation = validateSignedLicense(activated.license, publicKey);
@@ -51,7 +51,7 @@ async function main() {
       outcome: 'success',
       durationMs: 2500,
       productCount: 12,
-      appVersion: '4.25.0',
+      appVersion: '4.27.0',
       errorCode: '',
     }),
   });

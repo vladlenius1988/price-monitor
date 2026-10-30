@@ -1,6 +1,7 @@
 import corePackage from './server-core.js';
 import safetyPackage from './server-safety.js';
 import telemetryPackage from './telemetry.js';
+import supportPackage from './support-diagnostics.js';
 import { D1LicenseStore } from './d1-store.mjs';
 import { createActivationCode, createLicenseId, createWorkerCrypto } from './worker-crypto.mjs';
 
@@ -12,6 +13,7 @@ const {
 } = corePackage;
 const { rateLimitPolicy, requestId, safeEnvironment } = safetyPackage;
 const { normalizeSearchTelemetry } = telemetryPackage;
+const { normalizeSupportDiagnostic, telegramSupportMessage } = supportPackage;
 
 export default {
   async fetch(request, env) {
@@ -48,6 +50,25 @@ export default {
         });
         return json(202, { accepted: true, duplicate: !saved.inserted }, currentRequestId);
       }
+      if (request.method === 'POST' && url.pathname === '/v1/support/diagnostics') {
+        const normalized = normalizeSupportDiagnostic(await readJson(request));
+        if (!normalized.ok) throw new LicenseServiceError(normalized.reason, 400);
+        const diagnostic = normalized.value;
+        const license = await store.findLicenseById(diagnostic.licenseId);
+        if (!license) throw new LicenseServiceError('license_not_found', 404);
+        const device = await store.findDevice(diagnostic.licenseId, diagnostic.deviceId);
+        if (!device || device.status !== 'active') throw new LicenseServiceError('device_not_allowed', 403);
+        const saved = await store.recordSupportDiagnostic({ ...diagnostic, receivedAt: new Date().toISOString() });
+        const shouldNotify = saved.item?.severity === 'error'
+          && (saved.inserted || [3, 10].includes(Number(saved.item?.repeatCount)));
+        if (shouldNotify) await safeTelegramSupport(env, saved.item);
+        return json(202, {
+          accepted: true,
+          caseId: saved.item?.id || diagnostic.reportId,
+          repeated: Boolean(saved.repeated),
+          repeatCount: Number(saved.item?.repeatCount) || 1,
+        }, currentRequestId);
+      }
       if (url.pathname.startsWith('/admin/api/')) {
         requireAdmin(request, env.ADMIN_TOKEN);
         if (request.method === 'GET' && url.pathname === '/admin/api/overview') {
@@ -76,6 +97,17 @@ export default {
             paidUntil: record.paidUntil,
           });
           return json(201, { license: sanitizeLicense(record), activationCode }, currentRequestId);
+        }
+        const supportMatch = url.pathname.match(/^\/admin\/api\/support\/([^/]+)$/);
+        if (supportMatch && request.method === 'PATCH') {
+          const id = decodeURIComponent(supportMatch[1]);
+          const body = await readJson(request);
+          const status = String(body.status || '');
+          if (!['open', 'resolved'].includes(status)) throw new LicenseServiceError('support_status_invalid', 400);
+          const updated = await store.updateSupportDiagnostic(id, status);
+          if (!updated) throw new LicenseServiceError('support_case_not_found', 404);
+          await safeAudit(store, 'admin_support_updated', updated.licenseId, request, { supportId: id, status });
+          return json(200, { support: updated }, currentRequestId);
         }
         const activationCodeMatch = url.pathname.match(/^\/admin\/api\/licenses\/([^/]+)\/activation-code$/);
         if (activationCodeMatch && request.method === 'POST') {
@@ -145,7 +177,22 @@ function serviceStatus(env, databaseOk, currentRequestId) {
     recoveryDays: 7,
     time: new Date().toISOString(),
     requestId: currentRequestId,
+    telegramConfigured: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
   };
+}
+
+async function safeTelegramSupport(env, item) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return { sent: false, reason: 'telegram_not_configured' };
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: telegramSupportMessage(item) }),
+    });
+    return response.ok ? { sent: true, reason: '' } : { sent: false, reason: 'telegram_send_failed' };
+  } catch (_error) {
+    return { sent: false, reason: 'telegram_send_failed' };
+  }
 }
 
 async function enforceRateLimit(request, url, env, store) {

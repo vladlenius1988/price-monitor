@@ -70,6 +70,18 @@
     .telemetry-grid h3 { margin: 0 0 8px; }
     .metric-success { color: #167149; }
     .metric-error { color: #a12c24; }
+    .support-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+    .support-toolbar input { flex: 1 1 280px; }
+    .support-list { display: grid; gap: 12px; }
+    .support-card { border: 1px solid #dce4ef; border-left: 5px solid #7890aa; border-radius: 12px; padding: 14px; background: #fff; }
+    .support-card.is-error { border-left-color: #c03a31; }
+    .support-card.is-warning { border-left-color: #d78a19; }
+    .support-card.is-resolved { opacity: .72; background: #f7f9fc; }
+    .support-head { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
+    .support-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; color: #687892; font-size: 12px; }
+    .support-meta span { padding: 4px 7px; border-radius: 999px; background: #f1f4f8; }
+    .support-events { margin: 10px 0 0; padding-left: 20px; color: #41506a; }
+    .support-actions { display: flex; gap: 8px; align-items: center; }
     .environment-production { color: #21613e; }
     .environment-staging { color: #8a5a16; }
     @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .telemetry-grid { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
@@ -113,6 +125,25 @@
       </div>
       <h3>Останні помилки · 30 днів</h3>
       <div id="telemetry-errors" class="muted table-wrap">Помилок не зафіксовано.</div>
+    </section>
+
+    <section id="support-section">
+      <div class="section-heading">
+        <div><h2>Звернення підтримки</h2><p>Безпечна технічна діагностика, яку клієнт надіслав прямо з програми.</p></div>
+        <span id="support-telegram-status" class="status-pill">Telegram: перевіряю…</span>
+      </div>
+      <p class="telemetry-note">Приватність: тут немає пошукових запитів, торгових марок, назв товарів, цін або штрихкодів.</p>
+      <div class="summary">
+        <article><strong id="support-open">0</strong><span class="muted">відкритих</span></article>
+        <article><strong id="support-recurring">0</strong><span class="muted">повторюються</span></article>
+        <article><strong id="support-errors">0</strong><span class="muted">критичних</span></article>
+        <article><strong id="support-resolved">0</strong><span class="muted">закритих</span></article>
+      </div>
+      <div class="support-toolbar">
+        <label>Стан<select id="support-status-filter"><option value="open">Відкриті</option><option value="all">Усі</option><option value="resolved">Закриті</option></select></label>
+        <label>Знайти клієнта або пристрій<input id="support-text-filter" placeholder="Наприклад, PROSTOR або код пристрою"></label>
+      </div>
+      <div id="support-inbox" class="support-list muted">Звернень ще немає.</div>
     </section>
 
     <section class="hero-section">

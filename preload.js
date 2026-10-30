@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('priceParser', {
   reportSearchTelemetry: (payload) => ipcRenderer.invoke('telemetry:search', payload),
   recordDiagnosticEvent: (payload) => ipcRenderer.invoke('diagnostics:record', payload),
   exportDiagnostics: () => ipcRenderer.invoke('diagnostics:export'),
+  sendDiagnostics: () => ipcRenderer.invoke('diagnostics:send'),
   checkForUpdate: () => ipcRenderer.invoke('updates:check'),
   installUpdate: (releaseId) => ipcRenderer.invoke('updates:download-install', { releaseId }),
   suggestBrands: (store, query) => ipcRenderer.invoke('brands:suggest', { store, query }),

@@ -80,6 +80,31 @@ function debugRenderer(message) {
   }
 }
 
+async function collectDiagnosticReport() {
+  const access = accessStore.getStatus();
+  const server = typeof accessStore.probeServer === 'function'
+    ? await accessStore.probeServer().catch(() => ({ checked: true, available: false, reason: 'server_unavailable' }))
+    : { checked: false, available: false, reason: 'not_configured' };
+  const events = diagnosticStore ? await diagnosticStore.list() : [];
+  return buildDiagnosticReport({
+    appInfo: {
+      name: editionSettings.name,
+      version: app.getVersion(),
+      edition: APP_EDITION,
+    },
+    system: {
+      platform: process.platform,
+      release: os.release(),
+      arch: process.arch,
+      locale: app.getLocale?.() || '',
+    },
+    access,
+    server,
+    supportedStores: Object.keys(STORES),
+    events,
+  });
+}
+
 function accessDeniedMessage(reason) {
   if (reason === 'brand_limit') return 'У демо-версії можна перевірити не більше трьох марок за один пошук.';
   if (reason === 'time_expired' && APP_EDITION === 'licensed') {
@@ -229,28 +254,8 @@ function registerIpcHandlers() {
     }
   });
   ipcMain.handle('diagnostics:export', async () => {
+    const report = await collectDiagnosticReport();
     const access = accessStore.getStatus();
-    const server = typeof accessStore.probeServer === 'function'
-      ? await accessStore.probeServer().catch(() => ({ checked: true, available: false, reason: 'server_unavailable' }))
-      : { checked: false, available: false, reason: 'not_configured' };
-    const events = diagnosticStore ? await diagnosticStore.list() : [];
-    const report = buildDiagnosticReport({
-      appInfo: {
-        name: editionSettings.name,
-        version: app.getVersion(),
-        edition: APP_EDITION,
-      },
-      system: {
-        platform: process.platform,
-        release: os.release(),
-        arch: process.arch,
-        locale: app.getLocale?.() || '',
-      },
-      access,
-      server,
-      supportedStores: Object.keys(STORES),
-      events,
-    });
     const deviceCode = access.deviceCode || 'пристрій';
     const date = new Date().toISOString().slice(0, 10);
     const result = await dialog.showSaveDialog(mainWindow, {
@@ -261,6 +266,17 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePath) return { saved: false, canceled: true, filePath: '' };
     await fs.promises.writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     return { saved: true, canceled: false, filePath: result.filePath, server: report.server };
+  });
+  ipcMain.handle('diagnostics:send', async () => {
+    if (typeof accessStore.reportSupportDiagnostic !== 'function') {
+      return { accepted: false, reason: 'not_configured' };
+    }
+    const report = await collectDiagnosticReport();
+    const result = await accessStore.reportSupportDiagnostic(report);
+    if (result.accepted && diagnosticStore) {
+      await diagnosticStore.add({ area: 'server', outcome: 'info', code: 'diagnostic_sent' }).catch(() => {});
+    }
+    return result;
   });
 
   ipcMain.handle('updates:check', async () => {

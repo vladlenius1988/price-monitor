@@ -18,6 +18,7 @@ const EVENT_LABELS = {
   admin_license_updated: 'Власник змінив ліцензію',
   admin_activation_code_rotated: 'Власник оновив код активації',
   admin_device_removed: 'Власник відв’язав пристрій',
+  admin_support_updated: 'Власник змінив стан звернення',
   rate_limited: 'Забагато запитів',
   server_error: 'Помилка сервера',
 };
@@ -40,6 +41,10 @@ const releases = document.getElementById('releases');
 const telegramForm = document.getElementById('telegram-settings');
 const telegramStatus = document.getElementById('telegram-status');
 const testTelegramButton = document.getElementById('test-telegram');
+const supportInbox = document.getElementById('support-inbox');
+const supportStatusFilter = document.getElementById('support-status-filter');
+const supportTextFilter = document.getElementById('support-text-filter');
+let supportItems = [];
 let ownerMode = 'browser';
 
 renderStoreCheckboxes(createStores, STORE_IDS, 'create-store');
@@ -53,6 +58,9 @@ selectReleaseButton.addEventListener('click', () => selectReleaseInstaller().cat
 publishReleaseForm.addEventListener('submit', (event) => publishRelease(event).catch(showError));
 telegramForm.addEventListener('submit', (event) => saveTelegram(event).catch(showError));
 testTelegramButton.addEventListener('click', () => testTelegram().catch(showError));
+supportInbox.addEventListener('click', (event) => handleSupportAction(event).catch(showError));
+supportStatusFilter.addEventListener('change', renderSupportInbox);
+supportTextFilter.addEventListener('input', renderSupportInbox);
 initializeOwner().catch(showError);
 setInterval(() => {
   const isEditing = document.activeElement?.matches('input,select,textarea');
@@ -147,6 +155,7 @@ async function refresh({ quiet = false } = {}) {
     renderService(data.service || {});
     renderSummary(data);
     renderTelemetry(data.telemetry || {});
+    renderSupport(data.support || [], data.service || {});
     renderAttention(data.licenses || []);
     renderLicenses(data.licenses || []);
     renderEvents(data.events || []);
@@ -208,6 +217,75 @@ function renderTelemetry(telemetry) {
   document.getElementById('telemetry-errors').innerHTML = errors.length
     ? `<table><thead><tr><th>Час</th><th>Клієнт</th><th>Магазин</th><th>Причина</th><th>Версія</th></tr></thead><tbody>${errors.map((item) => `<tr><td>${escapeHtml(formatDateTime(item.occurredAt))}</td><td>${escapeHtml(item.customerName || item.licenseId)}</td><td>${escapeHtml(STORE_LABELS[item.store] || item.store)}</td><td class="metric-error">${escapeHtml(telemetryErrorLabel(item.errorCode))}</td><td>${escapeHtml(item.appVersion || '—')}</td></tr>`).join('')}</tbody></table>`
     : '<p>Помилок не зафіксовано.</p>';
+}
+
+function renderSupport(items, service) {
+  supportItems = Array.isArray(items) ? items : [];
+  const open = supportItems.filter((item) => item.status === 'open');
+  document.getElementById('support-open').textContent = open.length;
+  document.getElementById('support-recurring').textContent = open.filter((item) => Number(item.repeatCount) > 1).length;
+  document.getElementById('support-errors').textContent = open.filter((item) => item.severity === 'error').length;
+  document.getElementById('support-resolved').textContent = supportItems.filter((item) => item.status === 'resolved').length;
+  const telegram = document.getElementById('support-telegram-status');
+  telegram.textContent = service.telegramConfigured ? 'Telegram: увімкнено' : 'Telegram: не налаштовано';
+  telegram.classList.toggle('is-blocked', !service.telegramConfigured);
+  renderSupportInbox();
+}
+
+function renderSupportInbox() {
+  const status = supportStatusFilter.value;
+  const search = supportTextFilter.value.trim().toLocaleLowerCase('uk-UA');
+  const filtered = supportItems.filter((item) => {
+    if (status !== 'all' && item.status !== status) return false;
+    const haystack = [item.customerName, item.licenseId, item.deviceLabel, item.deviceCode, item.appVersion]
+      .join(' ').toLocaleLowerCase('uk-UA');
+    return !search || haystack.includes(search);
+  });
+  if (!filtered.length) {
+    supportInbox.innerHTML = '<p>За цим фільтром звернень немає.</p>';
+    return;
+  }
+  supportInbox.innerHTML = filtered.map((item) => {
+    const errors = (item.events || []).filter((event) => event.outcome !== 'info');
+    const classes = `support-card is-${escapeHtml(item.severity || 'info')} ${item.status === 'resolved' ? 'is-resolved' : ''}`;
+    const action = item.status === 'resolved' ? 'open' : 'resolved';
+    const actionLabel = item.status === 'resolved' ? 'Повернути у відкриті' : 'Позначити вирішеним';
+    return `<article class="${classes}">
+      <div class="support-head"><div><strong>${escapeHtml(item.customerName || item.licenseId)}</strong><br><span class="muted">${escapeHtml(item.deviceLabel || 'Комп’ютер без назви')} · <code>${escapeHtml(item.deviceCode || shortCode(item.deviceId))}</code></span></div><div class="support-actions"><span class="status-pill ${item.status === 'resolved' ? 'is-blocked' : ''}">${item.status === 'resolved' ? 'Закрите' : 'Відкрите'}</span><button type="button" data-support-id="${escapeHtml(item.id)}" data-support-status="${action}">${actionLabel}</button></div></div>
+      <div class="support-meta"><span>версія ${escapeHtml(item.appVersion || '—')}</span><span>${escapeHtml(severityLabel(item.severity))}</span><span>повторів: ${Math.max(1, Number(item.repeatCount) || 1)}</span><span>перше: ${escapeHtml(formatDateTime(item.firstSeenAt))}</span><span>останнє: ${escapeHtml(formatDateTime(item.lastSeenAt))}</span></div>
+      ${errors.length ? `<ul class="support-events">${errors.map((event) => `<li>${escapeHtml(formatDateTime(event.at))} · ${escapeHtml(STORE_LABELS[event.store] || event.store || 'програма')} · ${escapeHtml(diagnosticCodeLabel(event.code))}</li>`).join('')}</ul>` : '<p class="muted">Критичних подій у звіті немає.</p>'}
+    </article>`;
+  }).join('');
+}
+
+async function handleSupportAction(event) {
+  const button = event.target.closest('[data-support-id]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/admin/api/support/${encodeURIComponent(button.dataset.supportId)}`, {
+      method: 'PATCH', body: JSON.stringify({ status: button.dataset.supportStatus }),
+    });
+    showNotice(button.dataset.supportStatus === 'resolved' ? 'Звернення закрито.' : 'Звернення знову відкрите.');
+    await refresh({ quiet: true });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function severityLabel(value) {
+  return ({ error: 'критична помилка', warning: 'попередження', info: 'інформація' })[value] || 'інформація';
+}
+
+function diagnosticCodeLabel(code) {
+  return ({
+    access_error: 'помилка доступу', catalog_unavailable: 'каталог не завантажився',
+    network_error: 'помилка мережі', no_results: 'нічого не знайдено', renderer_error: 'помилка інтерфейсу',
+    search_error: 'помилка пошуку', server_check_failed: 'не вдалося перевірити сервер',
+    server_unavailable: 'сервер недоступний', storage_error: 'помилка локальних даних', timeout: 'перевищено час очікування',
+    unhandled_rejection: 'необроблена помилка', unknown_error: 'невідома помилка',
+    update_check_failed: 'не вдалося перевірити оновлення', update_download_failed: 'не вдалося завантажити оновлення',
+  })[code] || String(code || 'невідома помилка');
 }
 
 function telemetryTable(items, label) {

@@ -106,6 +106,7 @@ const showCapabilitiesButton = document.getElementById('show-capabilities');
 const capabilitiesDialog = document.getElementById('capabilities-dialog');
 const showGuideButton = document.getElementById('show-guide');
 const saveDiagnosticsButton = document.getElementById('save-diagnostics');
+const sendDiagnosticsButton = document.getElementById('send-diagnostics');
 const guideDialog = document.getElementById('guide-dialog');
 const guideSearch = document.getElementById('guide-search');
 const guideClearSearch = document.getElementById('guide-clear-search');
@@ -267,6 +268,7 @@ importSavedListsButton.addEventListener('click', importSavedLists);
 clearSearchHistoryButton.addEventListener('click', clearStoreSearchHistory);
 showGuideButton.addEventListener('click', openGuide);
 saveDiagnosticsButton.addEventListener('click', exportDiagnostics);
+sendDiagnosticsButton.addEventListener('click', sendDiagnostics);
 guideSearch.addEventListener('input', filterGuideSections);
 guideClearSearch.addEventListener('click', () => {
   guideSearch.value = '';
@@ -2435,6 +2437,7 @@ function setControlsBusy(busy) {
   showArchiveButton.disabled = busy;
   showChangeReportButton.disabled = busy;
   saveDiagnosticsButton.disabled = busy;
+  sendDiagnosticsButton.disabled = busy;
   document.querySelectorAll('.product-history-button').forEach((button) => { button.disabled = busy; });
   parseButton.hidden = busy;
   parseButton.disabled = busy || isAccessBlocked();
@@ -2476,6 +2479,28 @@ async function exportDiagnostics() {
     recordDiagnosticEvent({ area: 'storage', outcome: 'error', code: 'diagnostic_export_failed' });
   } finally {
     saveDiagnosticsButton.disabled = state.parsing;
+  }
+}
+
+async function sendDiagnostics() {
+  if (!parserAvailable || typeof parserApi?.sendDiagnostics !== 'function') return showLaunchHint();
+  if (state.parsing) return;
+  sendDiagnosticsButton.disabled = true;
+  setStatus('Формую безпечний звіт і надсилаю власнику…', 'loading');
+  try {
+    const result = await parserApi.sendDiagnostics();
+    if (result?.accepted) {
+      const repeated = result.repeated ? ` · повторне звернення №${result.repeatCount}` : '';
+      setStatus(`Діагностику надіслано. Номер звернення: ${result.caseId}${repeated}`, 'success');
+    } else if (result?.reason === 'server_unavailable') {
+      setStatus('Сервер тимчасово недоступний. Збережіть діагностику у файл і передайте її вручну.', 'warning');
+    } else {
+      setStatus('Не вдалося надіслати діагностику. Скористайтеся збереженням у файл.', 'error');
+    }
+  } catch (_error) {
+    setStatus('Не вдалося надіслати діагностику. Скористайтеся збереженням у файл.', 'error');
+  } finally {
+    sendDiagnosticsButton.disabled = state.parsing;
   }
 }
 
