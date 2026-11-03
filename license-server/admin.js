@@ -38,6 +38,9 @@ const publishReleaseForm = document.getElementById('publish-release');
 const releaseSource = document.getElementById('release-source');
 const selectReleaseButton = document.getElementById('select-release');
 const releases = document.getElementById('releases');
+const releaseProgress = document.getElementById('release-progress');
+const releaseProgressBar = document.getElementById('release-progress-bar');
+const releaseProgressText = document.getElementById('release-progress-text');
 const telegramForm = document.getElementById('telegram-settings');
 const telegramStatus = document.getElementById('telegram-status');
 const testTelegramButton = document.getElementById('test-telegram');
@@ -56,12 +59,14 @@ licenses.addEventListener('click', (event) => handleLicenseAction(event).catch(s
 attention.addEventListener('click', focusAttentionClient);
 selectReleaseButton.addEventListener('click', () => selectReleaseInstaller().catch(showError));
 publishReleaseForm.addEventListener('submit', (event) => publishRelease(event).catch(showError));
+releases.addEventListener('click', (event) => handleReleaseAction(event).catch(showError));
 telegramForm.addEventListener('submit', (event) => saveTelegram(event).catch(showError));
 testTelegramButton.addEventListener('click', () => testTelegram().catch(showError));
 supportInbox.addEventListener('click', (event) => handleSupportAction(event).catch(showError));
 supportStatusFilter.addEventListener('change', renderSupportInbox);
 supportTextFilter.addEventListener('input', renderSupportInbox);
 initializeOwner().catch(showError);
+window.priceMonitorOwner?.onReleaseProgress?.(renderReleaseProgress);
 setInterval(() => {
   const isEditing = document.activeElement?.matches('input,select,textarea');
   const hasOpenClient = Boolean(licenses.querySelector('.client-actions[open]'));
@@ -79,7 +84,6 @@ async function initializeOwner() {
   if (ownerMode === 'cloud') {
     document.getElementById('owner-title').textContent = 'Хмарне керування Price Monitor';
     document.getElementById('owner-description').textContent = 'Ліцензії та пристрої зберігаються у Cloudflare. Адміністративний токен залишається на цьому комп’ютері.';
-    document.getElementById('updates-section').hidden = true;
     document.getElementById('telegram-section').hidden = true;
   }
   await refresh();
@@ -472,22 +476,62 @@ async function selectReleaseInstaller() {
 async function publishRelease(event) {
   event.preventDefault();
   const fields = new FormData(publishReleaseForm);
-  const body = await api('/admin/api/releases', {
-    method: 'POST',
-    body: JSON.stringify({
-      version: fields.get('version'), channel: fields.get('channel'), sourcePath: fields.get('sourcePath'),
-      required: fields.get('required') === 'true', notes: fields.get('notes'),
-    }),
-  });
+  const input = {
+    version: fields.get('version'), channel: fields.get('channel'), sourcePath: fields.get('sourcePath'),
+    required: fields.get('required') === 'true', notes: fields.get('notes'),
+  };
+  const submit = publishReleaseForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  releaseProgress.hidden = false;
+  releaseProgressBar.value = 0;
+  releaseProgressText.textContent = 'Перевіряю файл і рахую контрольну суму…';
+  let body;
+  try {
+    body = ownerMode === 'cloud' && window.priceMonitorOwner?.publishRelease
+      ? await window.priceMonitorOwner.publishRelease(input)
+      : await api('/admin/api/releases', { method: 'POST', body: JSON.stringify(input) });
+  } finally {
+    submit.disabled = false;
+  }
   showNotice(`Оновлення ${body.release.version} підписано й опубліковано для каналу ${body.release.channel}.`);
   publishReleaseForm.reset();
   publishReleaseForm.elements.channel.value = 'licensed';
   await refresh();
 }
 
+function renderReleaseProgress(progress = {}) {
+  releaseProgress.hidden = false;
+  releaseProgressBar.value = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+  const labels = {
+    hashing: 'Перевіряю файл і рахую SHA-256…',
+    uploading: `Завантажую у хмару: ${releaseProgressBar.value}%`,
+    publishing: 'Підписую маніфест і публікую…',
+    complete: 'Оновлення опубліковано.',
+  };
+  releaseProgressText.textContent = labels[progress.phase] || 'Обробляю оновлення…';
+}
+
 function renderReleases(items) {
   if (!items.length) { releases.innerHTML = '<p>Оновлень ще немає.</p>'; return; }
-  releases.innerHTML = `<table><thead><tr><th>Версія</th><th>Канал</th><th>Файл</th><th>Опубліковано</th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${escapeHtml(item.version)}</strong>${item.required ? '<br><span class="muted">обов’язкове</span>' : ''}</td><td>${escapeHtml(item.channel)}</td><td>${escapeHtml(item.fileName)}<br><code>${escapeHtml(String(item.sha256 || '').slice(0, 16))}…</code></td><td>${escapeHtml(formatDateTime(item.publishedAt))}</td></tr>`).join('')}</tbody></table>`;
+  releases.innerHTML = `<table><thead><tr><th>Версія</th><th>Канал</th><th>Файл</th><th>Опубліковано</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${escapeHtml(item.version)}</strong>${item.required ? '<br><span class="muted">обов’язкове</span>' : ''}</td><td>${escapeHtml(item.channel)}</td><td>${escapeHtml(item.fileName)}<br><span class="muted">${escapeHtml(formatBytes(item.size))}</span><br><code>${escapeHtml(String(item.sha256 || '').slice(0, 16))}…</code></td><td>${escapeHtml(formatDateTime(item.publishedAt))}</td><td>${ownerMode === 'cloud' ? `<button class="danger" type="button" data-release-remove="${escapeHtml(item.releaseId)}">Зняти</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+}
+
+async function handleReleaseAction(event) {
+  const button = event.target.closest('[data-release-remove]');
+  if (!button) return;
+  if (!window.confirm('Зняти це оновлення з публікації? Клієнти більше не отримуватимуть його.')) return;
+  button.disabled = true;
+  try {
+    await api(`/admin/api/releases/${encodeURIComponent(button.dataset.releaseRemove)}`, { method: 'DELETE' });
+    showNotice('Оновлення знято з публікації.');
+    await refresh();
+  } finally { button.disabled = false; }
+}
+
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
 function renderTelegramSettings(settings) {

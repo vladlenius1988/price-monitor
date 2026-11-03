@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { LicensedAccessStore, stableStringify } = require('./license-access');
+const { LicensedAccessStore, stableStringify, validateSignedUpdate } = require('./license-access');
 
 const DEVICE_ID = 'a'.repeat(64);
 
@@ -30,6 +30,26 @@ function signLicense(privateKey, overrides = {}) {
     Buffer.from(stableStringify(payload), 'utf8'),
     privateKey,
   ).toString('base64');
+  return { payload, signature };
+}
+
+function signUpdate(privateKey, overrides = {}) {
+  const payload = {
+    schemaVersion: 1,
+    kind: 'price-monitor-update',
+    releaseId: `rel_${'a'.repeat(32)}`,
+    version: '4.28.0',
+    channel: 'licensed',
+    fileName: 'Price Monitor Online Setup 4.28.0.exe',
+    size: 106_000_000,
+    sha256: 'b'.repeat(64),
+    notes: 'Хмарне оновлення',
+    required: false,
+    publishedAt: '2026-11-02T10:00:00.000Z',
+    downloadPath: `/v1/updates/download/rel_${'a'.repeat(32)}`,
+    ...overrides,
+  };
+  const signature = crypto.sign(null, Buffer.from(stableStringify(payload), 'utf8'), privateKey).toString('base64');
   return { payload, signature };
 }
 
@@ -184,6 +204,18 @@ test('server probe reports an unavailable endpoint without changing local access
     const before = store.getStatus();
     assert.deepEqual(await store.probeServer(), { checked: true, available: false, reason: 'server_unavailable' });
     assert.equal(store.getStatus().allowed, before.allowed);
+  });
+});
+
+test('accepts a signed cloud update and rejects an unsafe installer name', () => {
+  withLicensedStore(({ privateKey, create }) => {
+    const store = create();
+    const publicKey = fs.readFileSync(store.publicKeyPath, 'utf8');
+    assert.equal(validateSignedUpdate(signUpdate(privateKey), publicKey).valid, true);
+    const unsafe = signUpdate(privateKey, { fileName: '../Price Monitor.exe' });
+    const validation = validateSignedUpdate(unsafe, publicKey);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.reason, 'update_invalid');
   });
 });
 

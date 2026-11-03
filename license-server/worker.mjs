@@ -2,6 +2,7 @@ import corePackage from './server-core.js';
 import safetyPackage from './server-safety.js';
 import telemetryPackage from './telemetry.js';
 import supportPackage from './support-diagnostics.js';
+import releasePackage from './cloud-releases.js';
 import { D1LicenseStore } from './d1-store.mjs';
 import { createActivationCode, createLicenseId, createWorkerCrypto } from './worker-crypto.mjs';
 
@@ -14,6 +15,10 @@ const {
 const { rateLimitPolicy, requestId, safeEnvironment } = safetyPackage;
 const { normalizeSearchTelemetry } = telemetryPackage;
 const { normalizeSupportDiagnostic, telegramSupportMessage } = supportPackage;
+const {
+  MAX_UPLOAD_PART_BYTES, UPLOAD_PART_BYTES, createUpdatePayload,
+  normalizeReleaseMetadata, normalizeUpdateCheck, validateCompletedParts,
+} = releasePackage;
 
 export default {
   async fetch(request, env) {
@@ -50,6 +55,29 @@ export default {
         });
         return json(202, { accepted: true, duplicate: !saved.inserted }, currentRequestId);
       }
+      if (request.method === 'POST' && url.pathname === '/v1/updates/check') {
+        const normalized = normalizeUpdateCheck(await readJson(request));
+        if (!normalized.ok) throw new LicenseServiceError(normalized.reason, 400);
+        const check = normalized.value;
+        const license = await store.findLicenseById(check.licenseId);
+        if (!license) throw new LicenseServiceError('license_not_found', 404);
+        if (license.status !== 'active' || Date.parse(license.paidUntil) <= Date.now()) {
+          throw new LicenseServiceError('license_not_active', 403);
+        }
+        if (check.channel !== license.updateChannel) throw new LicenseServiceError('update_channel_invalid', 403);
+        const device = await store.findDevice(check.licenseId, check.deviceId);
+        if (!device || device.status !== 'active') throw new LicenseServiceError('device_not_allowed', 403);
+        const release = await store.latestRelease(check.channel, check.currentVersion);
+        return json(200, { update: release ? { payload: createUpdatePayload(release), signature: release.signature } : null }, currentRequestId);
+      }
+      const downloadMatch = url.pathname.match(/^\/v1\/updates\/download\/(rel_[a-f0-9]+)$/i);
+      if (request.method === 'GET' && downloadMatch) {
+        const release = await store.findRelease(downloadMatch[1]);
+        if (!release) throw new LicenseServiceError('release_not_found', 404);
+        const object = await env.RELEASES.get(release.objectKey);
+        if (!object) throw new LicenseServiceError('release_file_missing', 404);
+        return releaseDownload(object, release, currentRequestId);
+      }
       if (request.method === 'POST' && url.pathname === '/v1/support/diagnostics') {
         const normalized = normalizeSupportDiagnostic(await readJson(request));
         if (!normalized.ok) throw new LicenseServiceError(normalized.reason, 400);
@@ -77,6 +105,93 @@ export default {
             ...overview,
             service: serviceStatus(env, true, currentRequestId),
           }, currentRequestId);
+        }
+        if (request.method === 'POST' && url.pathname === '/admin/api/releases/uploads') {
+          const normalized = normalizeReleaseMetadata(await readJson(request));
+          if (!normalized.ok) throw new LicenseServiceError(normalized.reason, 400);
+          const metadata = normalized.value;
+          const releaseId = `rel_${crypto.randomUUID().replace(/-/g, '')}`;
+          const objectKey = `${safeEnvironment(env.ENVIRONMENT)}/${metadata.channel}/${metadata.version}/${releaseId}.exe`;
+          const multipart = await env.RELEASES.createMultipartUpload(objectKey, {
+            httpMetadata: { contentType: 'application/vnd.microsoft.portable-executable' },
+            customMetadata: { releaseId, version: metadata.version, channel: metadata.channel },
+          });
+          try {
+            await store.createReleaseUpload({
+              ...metadata, releaseId, objectKey, uploadId: multipart.uploadId, createdAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            await multipart.abort().catch(() => {});
+            throw error;
+          }
+          await safeAudit(store, 'admin_release_upload_started', '', request, {
+            releaseId, version: metadata.version, channel: metadata.channel, size: metadata.size,
+          });
+          return json(201, { upload: { releaseId, partSize: UPLOAD_PART_BYTES } }, currentRequestId);
+        }
+        const releasePartMatch = url.pathname.match(/^\/admin\/api\/releases\/uploads\/(rel_[a-f0-9]+)\/parts\/(\d+)$/i);
+        if (releasePartMatch && request.method === 'PUT') {
+          const releaseId = releasePartMatch[1];
+          const partNumber = Number(releasePartMatch[2]);
+          const length = Number(request.headers.get('content-length') || 0);
+          if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 100) throw new LicenseServiceError('release_part_invalid', 400);
+          if (length < 1 || length > MAX_UPLOAD_PART_BYTES) throw new LicenseServiceError('release_part_size_invalid', 413);
+          const pending = await store.findReleaseUpload(releaseId);
+          if (!pending) throw new LicenseServiceError('release_upload_not_found', 404);
+          const multipart = env.RELEASES.resumeMultipartUpload(pending.objectKey, pending.uploadId);
+          const uploaded = await multipart.uploadPart(partNumber, request.body);
+          return json(200, { partNumber: uploaded.partNumber, etag: uploaded.etag }, currentRequestId);
+        }
+        const releaseCompleteMatch = url.pathname.match(/^\/admin\/api\/releases\/uploads\/(rel_[a-f0-9]+)\/complete$/i);
+        if (releaseCompleteMatch && request.method === 'POST') {
+          const pending = await store.findReleaseUpload(releaseCompleteMatch[1]);
+          if (!pending) throw new LicenseServiceError('release_upload_not_found', 404);
+          const normalizedParts = validateCompletedParts((await readJson(request)).parts, pending.size, UPLOAD_PART_BYTES);
+          if (!normalizedParts.ok) throw new LicenseServiceError(normalizedParts.reason, 400);
+          const multipart = env.RELEASES.resumeMultipartUpload(pending.objectKey, pending.uploadId);
+          let release = null;
+          let previous = null;
+          try {
+            const completed = await multipart.complete(normalizedParts.value);
+            if (Number(completed.size) !== pending.size) throw new LicenseServiceError('release_size_mismatch', 400);
+            const publishedAt = new Date().toISOString();
+            const payload = createUpdatePayload({ ...pending, publishedAt });
+            const document = await cryptoProvider.signLicense(payload);
+            previous = await store.findReleaseVersion(pending.channel, pending.version);
+            release = await store.createRelease({
+              ...payload, signature: document.signature, objectKey: pending.objectKey,
+            });
+          } catch (error) {
+            await env.RELEASES.delete(pending.objectKey).catch(() => {});
+            await store.deleteReleaseUpload(pending.releaseId).catch(() => {});
+            throw error;
+          }
+          await store.deleteReleaseUpload(pending.releaseId);
+          if (previous?.objectKey && previous.objectKey !== pending.objectKey) await env.RELEASES.delete(previous.objectKey).catch(() => {});
+          await safeAudit(store, 'admin_release_published', '', request, {
+            releaseId: release.releaseId, version: release.version, channel: release.channel, size: release.size,
+          });
+          return json(201, { release: sanitizeRelease(release) }, currentRequestId);
+        }
+        const releaseUploadMatch = url.pathname.match(/^\/admin\/api\/releases\/uploads\/(rel_[a-f0-9]+)$/i);
+        if (releaseUploadMatch && request.method === 'DELETE') {
+          const pending = await store.findReleaseUpload(releaseUploadMatch[1]);
+          if (!pending) return json(200, { aborted: true }, currentRequestId);
+          const multipart = env.RELEASES.resumeMultipartUpload(pending.objectKey, pending.uploadId);
+          await multipart.abort().catch(() => {});
+          await store.deleteReleaseUpload(pending.releaseId);
+          await safeAudit(store, 'admin_release_upload_aborted', '', request, { releaseId: pending.releaseId });
+          return json(200, { aborted: true }, currentRequestId);
+        }
+        const releaseDeleteMatch = url.pathname.match(/^\/admin\/api\/releases\/(rel_[a-f0-9]+)$/i);
+        if (releaseDeleteMatch && request.method === 'DELETE') {
+          const removed = await store.deleteRelease(releaseDeleteMatch[1]);
+          if (!removed) throw new LicenseServiceError('release_not_found', 404);
+          await env.RELEASES.delete(removed.objectKey);
+          await safeAudit(store, 'admin_release_unpublished', '', request, {
+            releaseId: removed.releaseId, version: removed.version, channel: removed.channel,
+          });
+          return json(200, { removed: true }, currentRequestId);
         }
         if (request.method === 'POST' && url.pathname === '/admin/api/licenses') {
           const normalized = normalizeLicenseInput(await readJson(request));
@@ -163,6 +278,12 @@ export default {
 
   async scheduled(_controller, env) {
     const store = new D1LicenseStore(env.DB);
+    const expiredBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const expiredUploads = await store.listExpiredReleaseUploads(expiredBefore);
+    for (const pending of expiredUploads) {
+      await env.RELEASES.resumeMultipartUpload(pending.objectKey, pending.uploadId).abort().catch(() => {});
+      await store.deleteReleaseUpload(pending.releaseId);
+    }
     await store.cleanupOperationalData();
   },
 };
@@ -178,6 +299,7 @@ function serviceStatus(env, databaseOk, currentRequestId) {
     time: new Date().toISOString(),
     requestId: currentRequestId,
     telegramConfigured: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
+    releaseStorage: env.RELEASES ? 'ready' : 'unavailable',
   };
 }
 
@@ -274,8 +396,27 @@ function json(status, body, currentRequestId = '', options = {}) {
   });
 }
 
+function releaseDownload(object, release, currentRequestId) {
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('content-type', 'application/vnd.microsoft.portable-executable');
+  headers.set('content-length', String(object.size));
+  headers.set('content-disposition', `attachment; filename="${String(release.fileName).replace(/["\r\n]/g, '')}"`);
+  headers.set('cache-control', 'private, max-age=300');
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-request-id', currentRequestId);
+  headers.set('etag', object.httpEtag);
+  return new Response(object.body, { status: 200, headers });
+}
+
 function sanitizeLicense(record) {
   if (!record) return null;
   const { activationHash: _activationHash, ...safe } = record;
+  return safe;
+}
+
+function sanitizeRelease(record) {
+  if (!record) return null;
+  const { objectKey: _objectKey, signature: _signature, ...safe } = record;
   return safe;
 }

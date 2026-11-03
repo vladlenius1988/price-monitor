@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.27.0');
+  assert.equal(packageJson.version, '4.28.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1089,6 +1089,13 @@ test('cloud admin and cloud client stay isolated and use the HTTPS staging serve
   assert.match(adminHtml, /Приватність: тут немає пошукових запитів/);
   assert.match(adminRenderer, /function renderSupportInbox\(/);
   assert.match(adminRenderer, /data-support-id/);
+  assert.match(adminHtml, /Оновлення клієнтів/);
+  assert.match(adminHtml, /release-progress-bar/);
+  assert.match(adminPreload, /owner:publish-release/);
+  assert.match(adminRenderer, /window\.priceMonitorOwner\.publishRelease/);
+  assert.match(adminRenderer, /data-release-remove/);
+  assert.match(clientHtml, /update-download-progress/);
+  assert.match(clientRenderer, /showUpdateDownloadProgress/);
 });
 
 test('production apps use an isolated server, identity and signing key', () => {
@@ -1105,6 +1112,8 @@ test('production apps use an isolated server, identity and signing key', () => {
   assert.match(mainSource, /priceMonitorLicensePublicKey/);
   assert.match(workerConfig, /price-monitor-production/);
   assert.match(workerConfig, /RATE_LIMITING_ENABLED/);
+  assert.match(workerConfig, /price-monitor-releases-production/);
+  assert.match(mainSource, /update:download-progress/);
 });
 
 test('loads saved lists before the renderer and exposes their Ukrainian controls', () => {

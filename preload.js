@@ -59,4 +59,9 @@ contextBridge.exposeInMainWorld('priceParser', {
     ipcRenderer.on('update:available', listener);
     return () => ipcRenderer.removeListener('update:available', listener);
   },
+  onUpdateProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('update:download-progress', listener);
+    return () => ipcRenderer.removeListener('update:download-progress', listener);
+  },
 });

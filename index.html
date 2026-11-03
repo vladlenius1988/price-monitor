@@ -41,7 +41,7 @@
         <small id="license-refresh-status"></small>
       </div>
       <div id="update-notice" class="update-notice" hidden>
-        <div><strong id="update-title">Доступне оновлення</strong><small id="update-notes"></small></div>
+        <div><strong id="update-title">Доступне оновлення</strong><small id="update-notes"></small><progress id="update-download-progress" max="100" value="0" hidden></progress></div>
         <button id="install-update" class="compact-button accent-button" type="button">Завантажити й встановити</button>
       </div>
       <div id="license-activation" class="license-activation" hidden>
@@ -375,7 +375,7 @@
       <div id="guide-sections" class="guide-sections">
         <section id="guide-install" data-guide-section>
           <h3>1. Встановлення та оновлення</h3>
-          <ol><li>Запустіть інсталяційний файл потрібної версії: <code>Price Monitor Setup</code> для повної, <code>Price Monitor Demo Setup</code> для демонстраційної або <code>Price Monitor Licensed Setup</code> для ліцензійної версії.</li><li>Дочекайтеся завершення встановлення.</li><li>Оновлюйте кожну версію у власній папці: <code>Price Monitor</code>, <code>Price Monitor Demo</code> або <code>Price Monitor Licensed</code>.</li></ol>
+          <ol><li>Запустіть інсталяційний файл потрібної версії: <code>Price Monitor Setup</code> для повної, <code>Price Monitor Demo Setup</code> для демонстраційної, <code>Price Monitor Licensed Setup</code> для офлайн-ліцензії або <code>Price Monitor Online Setup</code> для серверної ліцензії.</li><li>Дочекайтеся завершення встановлення.</li><li>Кожна редакція має власну папку й окремі дані, тому вони можуть працювати на одному комп’ютері.</li><li>Price Monitor Online перевіряє підписані оновлення на сервері. Якщо нова версія доступна, натисніть «Завантажити й встановити»: програма перевірить розмір і SHA-256, запустить Setup та закриється. Якщо сервер тимчасово недоступний, поточна дозволена версія продовжує працювати.</li></ol>
           <p class="guide-note">Для роботи потрібен тільки відповідний Setup. Chrome або Edge певної версії не потрібні: програма має власний браузерний рушій.</p>
           <p class="guide-warning"><strong>Важливо:</strong> повну, демонстраційну й ліцензійну версії не можна встановлювати в одну папку. Якщо Windows покаже попередження безпеки, натисніть «Докладніше», а потім «Виконати все одно».</p>
           <p class="guide-warning"><strong>Обмеження демо:</strong> 14 календарних днів, 20 успішних пошуків, до 3 марок за запуск і до 1000 рядків у результаті. Лічильник видно у верхній панелі.</p>

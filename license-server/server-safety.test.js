@@ -13,6 +13,12 @@ test('assigns conservative limits only to known public and owner routes', () => 
   assert.deepEqual(rateLimitPolicy('POST', '/v1/support/diagnostics'), {
     name: 'diagnostics', limit: 30, windowSeconds: 3600,
   });
+  assert.deepEqual(rateLimitPolicy('POST', '/v1/updates/check'), {
+    name: 'update-check', limit: 120, windowSeconds: 900,
+  });
+  assert.deepEqual(rateLimitPolicy('GET', `/v1/updates/download/rel_${'a'.repeat(32)}`), {
+    name: 'update-download', limit: 60, windowSeconds: 3600,
+  });
   assert.equal(rateLimitPolicy('GET', '/unrelated'), null);
   assert.equal(rateLimitPolicy('PATCH', '/admin/api/licenses/lic_1').name, 'admin');
 });

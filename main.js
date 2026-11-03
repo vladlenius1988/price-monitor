@@ -294,17 +294,43 @@ function registerIpcHandlers() {
     try {
       const response = await fetch(downloadUrl);
       if (!response.ok) throw new Error('update_download_failed');
-      const contents = Buffer.from(await response.arrayBuffer());
-      if (contents.length !== update.payload.size) throw new Error('update_size_mismatch');
-      const hash = createHash('sha256').update(contents).digest('hex');
-      if (hash !== update.payload.sha256) throw new Error('update_hash_mismatch');
       const updateDirectory = path.join(app.getPath('userData'), 'updates');
       await fs.promises.mkdir(updateDirectory, { recursive: true });
       const installerPath = path.join(updateDirectory, path.basename(update.payload.fileName));
-      await fs.promises.writeFile(installerPath, contents);
+      const partialPath = `${installerPath}.partial`;
+      await fs.promises.rm(partialPath, { force: true });
+      const handle = await fs.promises.open(partialPath, 'w');
+      const hash = createHash('sha256');
+      let received = 0;
+      try {
+        if (!response.body) throw new Error('update_download_failed');
+        for await (const chunk of response.body) {
+          const buffer = Buffer.from(chunk);
+          received += buffer.length;
+          if (received > update.payload.size) throw new Error('update_size_mismatch');
+          hash.update(buffer);
+          await handle.write(buffer);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('update:download-progress', {
+              received, total: update.payload.size, percent: Math.round(received * 100 / update.payload.size),
+            });
+          }
+        }
+      } finally {
+        await handle.close();
+      }
+      if (received !== update.payload.size) throw new Error('update_size_mismatch');
+      if (hash.digest('hex') !== update.payload.sha256) throw new Error('update_hash_mismatch');
+      await fs.promises.rm(installerPath, { force: true });
+      await fs.promises.rename(partialPath, installerPath);
       const openError = await shell.openPath(installerPath);
-      return openError ? { started: false, reason: 'update_launch_failed' } : { started: true, reason: '' };
+      if (openError) return { started: false, reason: 'update_launch_failed' };
+      setTimeout(() => app.quit(), 1200);
+      return { started: true, reason: '' };
     } catch (error) {
+      const updateDirectory = path.join(app.getPath('userData'), 'updates');
+      const installerPath = path.join(updateDirectory, path.basename(update.payload.fileName));
+      await fs.promises.rm(`${installerPath}.partial`, { force: true }).catch(() => {});
       return { started: false, reason: String(error?.message || 'update_download_failed') };
     }
   });

@@ -10,7 +10,7 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
-        "SERVICE_VERSION": "4.27.0",
+        "SERVICE_VERSION": "4.28.0",
         "RATE_LIMITING_ENABLED": "false"
       },
       "d1_databases": [
@@ -20,6 +20,12 @@
           "database_id": "3d621aaf-9570-4d25-b0b7-5a6b86795aa9",
           "migrations_dir": "migrations"
         }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "RELEASES",
+          "bucket_name": "price-monitor-releases-staging"
+        }
       ]
     },
     "production": {
@@ -28,7 +34,7 @@
       "preview_urls": false,
       "vars": {
         "ENVIRONMENT": "production",
-        "SERVICE_VERSION": "4.27.0",
+        "SERVICE_VERSION": "4.28.0",
         "RATE_LIMITING_ENABLED": "true"
       },
       "d1_databases": [
@@ -37,6 +43,12 @@
           "database_name": "price-monitor-production",
           "database_id": "628fb244-6c20-48bf-8b6d-6957f3ef53d8",
           "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "RELEASES",
+          "bucket_name": "price-monitor-releases-production"
         }
       ],
       "triggers": {

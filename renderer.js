@@ -49,6 +49,7 @@ const updateNotice = document.getElementById('update-notice');
 const updateTitle = document.getElementById('update-title');
 const updateNotes = document.getElementById('update-notes');
 const installUpdateButton = document.getElementById('install-update');
+const updateDownloadProgress = document.getElementById('update-download-progress');
 let availableUpdate = null;
 const resultMeta = document.getElementById('result-meta');
 const tableBody = document.querySelector('#product-table tbody');
@@ -350,6 +351,7 @@ if (parserAvailable) {
   initializeAccess().catch(() => {});
   parserApi.onAccessChanged?.((status) => updateAccessUi(status));
   parserApi.onUpdateAvailable?.((update) => showAvailableUpdate(update));
+  parserApi.onUpdateProgress?.((progress) => showUpdateDownloadProgress(progress));
   restoreRecovery().catch(() => {});
 } else {
   showLaunchHint();
@@ -610,12 +612,22 @@ function showAvailableUpdate(update) {
   updateNotice.hidden = false;
   updateTitle.textContent = `Доступне оновлення ${update.payload.version}${update.payload.required ? ' · обов’язкове' : ''}`;
   updateNotes.textContent = update.payload.notes || 'Нова версія готова до встановлення.';
+  updateDownloadProgress.hidden = true;
+  updateDownloadProgress.value = 0;
+}
+
+function showUpdateDownloadProgress(progress = {}) {
+  updateDownloadProgress.hidden = false;
+  updateDownloadProgress.value = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+  installUpdateButton.textContent = `Завантажую… ${updateDownloadProgress.value}%`;
 }
 
 async function installAvailableUpdate() {
   if (!availableUpdate?.payload?.releaseId) return;
   installUpdateButton.disabled = true;
   installUpdateButton.textContent = 'Завантажую…';
+  updateDownloadProgress.hidden = false;
+  updateDownloadProgress.value = 0;
   const result = await parserApi.installUpdate(availableUpdate.payload.releaseId).catch(() => ({ started: false }));
   installUpdateButton.textContent = result.started ? 'Інсталятор запущено' : 'Повторити завантаження';
   installUpdateButton.disabled = Boolean(result.started);

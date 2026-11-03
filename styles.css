@@ -124,6 +124,7 @@ h2 { margin-bottom: 4px; font-size: 20px; }
 .update-notice { width: 100%; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid #8fc1a6; border-radius: 10px; background: #f4fbf7; }
 .update-notice > div { display: grid; gap: 3px; }
 .update-notice small { text-align: left; white-space: pre-wrap; }
+.update-notice progress { width: min(420px, 70vw); height: 12px; }
 
 .search-card, .results-card {
   border: 1px solid #e2e7ef;

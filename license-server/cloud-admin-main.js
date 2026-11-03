@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const packageInfo = require('../package.json');
 const { createOwnerApiClient } = require('./owner-api');
+const { uploadCloudRelease } = require('./cloud-release-uploader');
 
 const APP_NAME = String(packageInfo.priceMonitorAdminAppName || 'Price Monitor Cloud Admin');
 const USER_DATA_NAME = String(packageInfo.priceMonitorAdminUserDataName || APP_NAME);
@@ -15,6 +16,8 @@ const API_BASE_URL = process.env.PRICE_MONITOR_ADMIN_API_URL
 
 let mainWindow = null;
 let ownerApiClient = null;
+let adminToken = '';
+let selectedInstallerPath = '';
 
 const appDataRoot = app.getPath('appData');
 app.setName(APP_NAME);
@@ -81,7 +84,31 @@ ipcMain.handle('owner:api-request', async (_event, request) => {
     return { ok: false, status: 400, body: { error: 'request_invalid' } };
   }
 });
-ipcMain.handle('server:select-installer', async () => ({ canceled: true, filePath: '' }));
+ipcMain.handle('server:select-installer', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Оберіть інсталятор Price Monitor Online',
+    properties: ['openFile'],
+    filters: [{ name: 'Інсталятор Windows', extensions: ['exe'] }],
+  });
+  selectedInstallerPath = result.canceled ? '' : path.resolve(result.filePaths[0] || '');
+  return selectedInstallerPath ? { canceled: false, filePath: selectedInstallerPath } : { canceled: true, filePath: '' };
+});
+ipcMain.handle('owner:publish-release', async (_event, input = {}) => {
+  const sourcePath = path.resolve(String(input.sourcePath || ''));
+  if (!selectedInstallerPath || sourcePath !== selectedInstallerPath) throw new Error('release_file_not_selected');
+  return uploadCloudRelease({
+    sourcePath,
+    apiBaseUrl: API_BASE_URL,
+    adminToken,
+    version: input.version,
+    channel: input.channel,
+    notes: input.notes,
+    required: input.required,
+    onProgress: (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('owner:release-progress', progress);
+    },
+  });
+});
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -96,7 +123,8 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     app.setAppUserModelId(APP_ID);
     try {
-      ownerApiClient = createOwnerApiClient({ apiBaseUrl: API_BASE_URL, adminToken: ensureAdminToken() });
+      adminToken = ensureAdminToken();
+      ownerApiClient = createOwnerApiClient({ apiBaseUrl: API_BASE_URL, adminToken });
       await createWindow();
     } catch (error) {
       await dialog.showMessageBox({

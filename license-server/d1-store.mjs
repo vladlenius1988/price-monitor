@@ -1,6 +1,8 @@
 import telemetryPackage from './telemetry.js';
+import releasePackage from './cloud-releases.js';
 
 const { telemetrySummary } = telemetryPackage;
+const { compareVersions } = releasePackage;
 
 export class D1LicenseStore {
   constructor(database) {
@@ -157,6 +159,84 @@ export class D1LicenseStore {
       record.occurredAt,
     ).run();
     return { inserted: (Number(result?.meta?.changes) || 0) > 0 };
+  }
+
+  async createRelease(record) {
+    await this.db.prepare(`
+      INSERT INTO releases (
+        channel, version, release_id, file_name, size, object_key, installer_url,
+        sha256, signature, mandatory, minimum_version, notes, published_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, '', ?11, ?12)
+      ON CONFLICT(channel, version) DO UPDATE SET
+        release_id = excluded.release_id, file_name = excluded.file_name,
+        size = excluded.size, object_key = excluded.object_key,
+        installer_url = excluded.installer_url, sha256 = excluded.sha256,
+        signature = excluded.signature, mandatory = excluded.mandatory,
+        notes = excluded.notes, published_at = excluded.published_at
+    `).bind(
+      record.channel, record.version, record.releaseId, record.fileName, record.size,
+      record.objectKey, record.downloadPath, record.sha256, record.signature,
+      record.required ? 1 : 0, record.notes || '', record.publishedAt,
+    ).run();
+    return this.findRelease(record.releaseId);
+  }
+
+  async listReleases(channel = '') {
+    const result = channel
+      ? await this.db.prepare('SELECT * FROM releases WHERE channel = ?1 ORDER BY published_at DESC').bind(channel).all()
+      : await this.db.prepare('SELECT * FROM releases ORDER BY published_at DESC').all();
+    return (result.results || []).map(releaseFromRow);
+  }
+
+  async latestRelease(channel, currentVersion) {
+    const releases = await this.listReleases(channel);
+    return releases
+      .filter((item) => compareVersions(item.version, currentVersion) > 0)
+      .sort((left, right) => compareVersions(right.version, left.version))[0] || null;
+  }
+
+  async findRelease(id) {
+    return releaseFromRow(await this.db.prepare('SELECT * FROM releases WHERE release_id = ?1').bind(id).first());
+  }
+
+  async findReleaseVersion(channel, version) {
+    return releaseFromRow(await this.db.prepare(
+      'SELECT * FROM releases WHERE channel = ?1 AND version = ?2',
+    ).bind(channel, version).first());
+  }
+
+  async deleteRelease(id) {
+    const current = await this.findRelease(id);
+    if (!current) return null;
+    await this.db.prepare('DELETE FROM releases WHERE release_id = ?1').bind(id).run();
+    return current;
+  }
+
+  async createReleaseUpload(record) {
+    await this.db.prepare(`
+      INSERT INTO release_uploads (
+        release_id, upload_id, object_key, channel, version, file_name,
+        size, sha256, required, notes, created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+    `).bind(
+      record.releaseId, record.uploadId, record.objectKey, record.channel, record.version,
+      record.fileName, record.size, record.sha256, record.required ? 1 : 0,
+      record.notes || '', record.createdAt,
+    ).run();
+    return this.findReleaseUpload(record.releaseId);
+  }
+
+  async findReleaseUpload(id) {
+    return releaseUploadFromRow(await this.db.prepare('SELECT * FROM release_uploads WHERE release_id = ?1').bind(id).first());
+  }
+
+  async deleteReleaseUpload(id) {
+    await this.db.prepare('DELETE FROM release_uploads WHERE release_id = ?1').bind(id).run();
+  }
+
+  async listExpiredReleaseUploads(before) {
+    const result = await this.db.prepare('SELECT * FROM release_uploads WHERE created_at < ?1').bind(before).all();
+    return (result.results || []).map(releaseUploadFromRow);
   }
 
   async recordSupportDiagnostic(record) {
@@ -357,12 +437,13 @@ export class D1LicenseStore {
 
   async overview() {
     const licenses = await this.listLicenses();
-    const [devicesResult, eventsResult, eventCountRow, telemetry, support] = await Promise.all([
+    const [devicesResult, eventsResult, eventCountRow, telemetry, support, releases] = await Promise.all([
       this.db.prepare('SELECT * FROM devices ORDER BY last_seen_at DESC').all(),
       this.db.prepare('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 100').all(),
       this.db.prepare('SELECT COUNT(*) AS total FROM events').first(),
       this.searchTelemetryOverview(),
       this.listSupportDiagnostics(),
+      this.listReleases(),
     ]);
     const devices = (devicesResult.results || []).map(deviceFromRow);
     return {
@@ -374,6 +455,7 @@ export class D1LicenseStore {
       eventCount: Number(eventCountRow?.total) || 0,
       telemetry,
       support,
+      releases: releases.map(({ objectKey: _objectKey, signature: _signature, ...release }) => release),
     };
   }
 }
@@ -402,6 +484,41 @@ function supportDiagnosticFromRow(row) {
     lastSeenAt: row.last_seen_at,
     repeatCount: Math.max(1, Number(row.repeat_count) || 1),
     resolvedAt: row.resolved_at || '',
+  };
+}
+
+function releaseFromRow(row) {
+  if (!row) return null;
+  return {
+    releaseId: row.release_id,
+    channel: row.channel,
+    version: row.version,
+    fileName: row.file_name,
+    size: Number(row.size) || 0,
+    objectKey: row.object_key,
+    downloadPath: row.installer_url,
+    sha256: row.sha256,
+    signature: row.signature,
+    required: Boolean(row.mandatory),
+    notes: row.notes || '',
+    publishedAt: row.published_at,
+  };
+}
+
+function releaseUploadFromRow(row) {
+  if (!row) return null;
+  return {
+    releaseId: row.release_id,
+    uploadId: row.upload_id,
+    objectKey: row.object_key,
+    channel: row.channel,
+    version: row.version,
+    fileName: row.file_name,
+    size: Number(row.size) || 0,
+    sha256: row.sha256,
+    required: Boolean(row.required),
+    notes: row.notes || '',
+    createdAt: row.created_at,
   };
 }
 

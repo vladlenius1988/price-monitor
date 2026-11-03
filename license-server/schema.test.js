@@ -65,3 +65,13 @@ test('support diagnostics schema stores only bounded technical data without comm
     assert.doesNotMatch(table, /search_query|brand_name|product_name|price|barcode|ean|gtin/i);
   }
 });
+
+test('cloud release migration stores signed manifests and resumable upload state', () => {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, 'migrations', '0005_cloud_releases.sql'), 'utf8');
+  assert.match(schema, /release_id TEXT NOT NULL UNIQUE/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS release_uploads/);
+  assert.match(schema, /idx_release_uploads_created/);
+  assert.match(migration, /ALTER TABLE releases ADD COLUMN release_id/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS release_uploads/);
+});

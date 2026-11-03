@@ -670,6 +670,7 @@ function isValidUpdatePayload(payload) {
     && /^\d+\.\d+\.\d+(?:[-+][a-z0-9.-]+)?$/i.test(String(payload.version || ''))
     && /^[a-z0-9_-]{1,40}$/.test(String(payload.channel || ''))
     && /^[a-f0-9]{64}$/i.test(String(payload.sha256 || ''))
+    && /^[^\\/\r\n"]{1,180}\.exe$/i.test(String(payload.fileName || ''))
     && Number.isInteger(payload.size)
     && payload.size > 0
     && /^\/v1\/updates\/download\/rel_[a-f0-9]+$/i.test(String(payload.downloadPath || ''))
