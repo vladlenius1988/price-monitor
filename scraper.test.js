@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.28.0');
+  assert.equal(packageJson.version, '4.29.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1050,7 +1050,44 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
   assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
+  assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
+  assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
   assert.deepEqual(packageJson.build.win.target, ['nsis']);
+});
+
+test('compares one valid barcode across stores and exports a clearly qualified report', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+  const clientConfigs = [
+    'electron-builder.cloud-client.yml',
+    'electron-builder.demo.yml',
+    'electron-builder.licensed.yml',
+    'electron-builder.local-client.yml',
+    'electron-builder.production-client.yml',
+    'electron-builder.remote-client.yml'
+  ];
+
+  assert.ok(html.indexOf('<script src="cross-store-barcode.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
+  assert.match(html, /id="show-barcode-monitor"/);
+  assert.match(html, /id="barcode-monitor-dialog"/);
+  assert.match(html, /Штрихкод у всіх магазинах/);
+  assert.match(renderer, /normalizeBarcode\(barcodeMonitorQuery\.value\)/);
+  assert.match(renderer, /productSearch: !isExactSource/);
+  assert.match(renderer, /selectCandidateMatches\(reference, result\.products/);
+  assert.match(renderer, /parserApi\.exportCrossStoreBarcode/);
+  assert.match(preload, /exportCrossStoreBarcode: \(payload\) => ipcRenderer\.invoke\('products:export-cross-store-barcode'/);
+  assert.match(main, /ipcMain\.handle\('products:export-cross-store-barcode'/);
+  assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
+  assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
+
+  for (const configName of clientConfigs) {
+    const config = fs.readFileSync(path.join(__dirname, configName), 'utf8');
+    assert.match(config, /- cross-store-barcode\.js/, configName);
+    assert.match(config, /- cross-store-barcode-export\.js/, configName);
+  }
 });
 
 test('cloud admin and cloud client stay isolated and use the HTTPS staging server', () => {

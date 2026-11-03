@@ -116,7 +116,10 @@ class PriceScraper {
           searchMode: true,
           barcodeMode: true,
         }
-        : await this.resolveBrand(store, query);
+        : await this.resolveBrand(store, query, {
+          forceSearch: Boolean(options.productSearch),
+          resultName: String(options.productSearchBrand || '').trim(),
+        });
       this.setRecoveryBrand(match.name);
       this.assertNotCancelled();
 
@@ -334,15 +337,15 @@ class PriceScraper {
     return null;
   }
 
-  async resolveBrand(store, query) {
+  async resolveBrand(store, query, options = {}) {
     const directUrl = parseSupportedUrl(query, STORES[store].host);
     if (directUrl) {
       return { name: brandNameFromUrl(directUrl), url: directUrl, searchMode: false };
     }
 
-    if (!STORES[store].brandIndexUrl) {
+    if (options.forceSearch || !STORES[store].brandIndexUrl) {
       return {
-        name: query.trim(),
+        name: options.resultName || query.trim(),
         url: STORES[store].fallbackSearchUrl + encodeURIComponent(query.trim()),
         searchMode: true,
       };

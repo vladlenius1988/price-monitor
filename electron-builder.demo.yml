@@ -19,6 +19,8 @@ files:
   - multi-store-export.js
   - change-report.js
   - result-view.js
+  - cross-store-barcode.js
+  - cross-store-barcode-export.js
   - demo-access.js
   - license-access.js
   - diagnostic-report.js

@@ -14,6 +14,7 @@ const { compareArchivedChecks } = require('./archive-tools');
 const { buildPriceHistoryWorkbook } = require('./price-history-export');
 const { buildCombinedArchiveWorkbook, buildFilteredArchiveWorkbook } = require('./multi-store-export');
 const { buildCrossStoreChangeReport, buildChangeReportWorkbook } = require('./change-report');
+const { buildCrossStoreBarcodeWorkbook } = require('./cross-store-barcode-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
@@ -353,6 +354,8 @@ function registerIpcHandlers() {
       includeVariants: ['eva', 'makeup', 'notino', 'aurora'].includes(store) && Boolean(payload.options?.includeVariants),
       includeSellers: store === 'rozetka' && Boolean(payload.options?.includeSellers),
       includeBarcodes: store === 'makeup' && Boolean(payload.options?.includeBarcodes),
+      productSearch: Boolean(payload.options?.productSearch),
+      productSearchBrand: String(payload.options?.productSearchBrand || '').trim().slice(0, 120),
       previousProducts: Array.isArray(payload.options?.previousProducts)
         ? payload.options.previousProducts
         : [],
@@ -731,6 +734,20 @@ function registerIpcHandlers() {
     });
 
     if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, buffer);
+    return result.filePath;
+  });
+
+  ipcMain.handle('products:export-cross-store-barcode', async (_event, payload = {}) => {
+    const sheets = buildCrossStoreBarcodeWorkbook(payload);
+    const barcode = String(payload.barcode || '').replace(/[^0-9]/g, '').slice(0, 14);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Зберегти порівняння цін за штрихкодом',
+      defaultPath: `price_monitor_barcode_${barcode || 'товар'}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const buffer = await writeExcelFile(sheets).toBuffer();
     await fs.promises.writeFile(result.filePath, buffer);
     return result.filePath;
   });
