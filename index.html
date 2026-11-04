@@ -20,6 +20,7 @@
         <button id="save-diagnostics" class="capabilities-button" type="button" title="Без пошукових запитів, товарів і цін">Зберегти діагностику</button>
         <button id="send-diagnostics" class="capabilities-button" type="button" title="Безпечно передати технічний звіт власнику">Надіслати діагностику</button>
         <button id="show-archive" class="capabilities-button" type="button">Архів перевірок</button>
+        <button id="show-multi-store-monitor" class="capabilities-button" type="button">Марка в кількох магазинах</button>
         <button id="show-barcode-monitor" class="capabilities-button" type="button">Штрихкод у всіх магазинах</button>
         <button id="show-change-report" class="capabilities-button" type="button">Зміни за магазинами</button>
         <button id="show-capabilities" class="capabilities-button" type="button">Можливості магазинів</button>
@@ -250,8 +251,14 @@
     <p class="capabilities-intro">Спочатку MAKEUP підтверджує точний EAN/GTIN у картці доступного варіанта. Потім програма шукає цей товар за назвою в інших магазинах. Такі рядки завжди позначені як ймовірні або неточні — програма не видає назву за підтверджений штрихкод.</p>
     <div class="barcode-monitor-search">
       <label for="barcode-monitor-query">EAN / GTIN<input id="barcode-monitor-query" type="text" maxlength="24" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Наприклад: 3600531609764"></label>
-      <button id="barcode-monitor-start" class="primary-button" type="button">Перевірити всі магазини</button>
+      <label for="barcode-monitor-mode">Режим<select id="barcode-monitor-mode"><option value="fast">Швидко</option><option value="detailed">Повна перевірка</option></select></label>
+      <button id="barcode-monitor-start" class="primary-button" type="button">Перевірити вибрані</button>
       <button id="barcode-monitor-cancel" class="secondary-button" type="button" hidden>Зупинити</button>
+    </div>
+    <div class="multi-store-options">
+      <strong>Магазини</strong>
+      <div id="barcode-monitor-store-picker" class="store-picker"></div>
+      <small>MAKEUP потрібен як точне джерело EAN/GTIN. Швидкий режим не відкриває всі варіанти й пропозиції продавців в інших магазинах.</small>
     </div>
     <div class="barcode-monitor-status-row" aria-live="polite">
       <span id="barcode-monitor-spinner" class="spinner" hidden aria-hidden="true"></span>
@@ -267,7 +274,44 @@
       </table>
     </div>
     <div class="capabilities-footer history-footer">
+      <button id="barcode-monitor-retry" class="compact-button" type="button" hidden>Повторити помилки</button>
       <button id="barcode-monitor-export" class="primary-button" type="button" disabled>Експорт порівняння в Excel</button>
+      <form method="dialog"><button class="compact-button" type="submit">Закрити</button></form>
+    </div>
+  </dialog>
+
+  <dialog id="multi-store-monitor-dialog" class="capabilities-dialog barcode-monitor-dialog" aria-labelledby="multi-store-monitor-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Один запит — кілька джерел</p><h2 id="multi-store-monitor-title">Марка в кількох магазинах</h2></div>
+      <form method="dialog"><button id="multi-store-monitor-close" class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">Введіть одну або кілька торгових марок, оберіть магазини та отримайте спільну таблицю. Помилка одного магазину не видаляє результати інших, а повторна перевірка запускає лише проблемні джерела.</p>
+    <div class="barcode-monitor-search multi-store-monitor-search">
+      <label for="multi-store-monitor-query">Торгові марки<input id="multi-store-monitor-query" type="text" maxlength="500" autocomplete="off" spellcheck="false" placeholder="Наприклад: Nivea, Dove"></label>
+      <label for="multi-store-monitor-mode">Режим<select id="multi-store-monitor-mode"><option value="fast">Швидко</option><option value="detailed">Детально</option></select></label>
+      <button id="multi-store-monitor-start" class="primary-button" type="button">Почати моніторинг</button>
+      <button id="multi-store-monitor-cancel" class="secondary-button" type="button" hidden>Зупинити</button>
+    </div>
+    <div class="multi-store-options">
+      <strong>Магазини</strong>
+      <div id="multi-store-monitor-store-picker" class="store-picker"></div>
+      <small>У швидкому режимі збирається основний каталог. Детальний режим додатково перевіряє варіанти, штрихкоди MAKEUP і продавців Rozetka та може працювати значно довше.</small>
+    </div>
+    <div class="barcode-monitor-status-row" aria-live="polite">
+      <span id="multi-store-monitor-spinner" class="spinner" hidden aria-hidden="true"></span>
+      <span id="multi-store-monitor-status">Введіть торгову марку та оберіть магазини.</span>
+    </div>
+    <div id="multi-store-monitor-stores" class="barcode-monitor-stores" hidden></div>
+    <div id="multi-store-monitor-empty" class="barcode-monitor-empty">Результати з’являться тут після перевірки.</div>
+    <div id="multi-store-monitor-table-wrap" class="barcode-monitor-table-wrap" hidden>
+      <table class="barcode-monitor-table multi-store-monitor-table">
+        <thead><tr><th>Магазин</th><th>Товар</th><th>Торгова марка</th><th>Варіант / продавець</th><th>Поточна ціна</th><th>Звичайна ціна</th></tr></thead>
+        <tbody id="multi-store-monitor-rows"></tbody>
+      </table>
+    </div>
+    <div class="capabilities-footer history-footer">
+      <button id="multi-store-monitor-retry" class="compact-button" type="button" hidden>Повторити помилки</button>
+      <button id="multi-store-monitor-export" class="primary-button" type="button" disabled>Експорт спільного Excel</button>
       <form method="dialog"><button class="compact-button" type="submit">Закрити</button></form>
     </div>
   </dialog>
@@ -417,6 +461,7 @@
           <h3>2. Звичайний пошук товарів</h3>
           <ol><li>Оберіть магазин. За замовчуванням відкривається EVA.</li><li>Введіть торгову марку.</li><li>Кілька марок розділяйте комою, крапкою з комою або новим рядком.</li><li>За потреби увімкніть додатковий режим.</li><li>Натисніть «Знайти товари».</li></ol>
           <p>Помилка однієї марки не видаляє вже знайдені товари. У новому пошуку залишаються позиції, які сайт дозволяє придбати під час перевірки.</p>
+          <p class="guide-note"><strong>Одразу кілька магазинів:</strong> натисніть «Марка в кількох магазинах», введіть марки, залиште потрібні магазини та оберіть швидкий або детальний режим. Результати потраплять у спільну таблицю й окремий Excel. Цей разовий звіт не змінює архів звичайних перевірок.</p>
         </section>
         <section id="guide-modes" data-guide-section>
           <h3>3. Додаткові режими магазинів</h3>
@@ -424,6 +469,7 @@
           <p class="guide-note"><strong>Один штрихкод у всіх магазинах:</strong> натисніть однойменну кнопку у верхній частині програми та введіть валідний EAN/GTIN. MAKEUP спочатку підтвердить точний доступний товар і варіант за кодом. В інших підключених магазинах програма шукатиме найбільш схожі доступні товари за назвою, маркою та варіантом.</p>
           <p class="guide-warning"><strong>Не плутайте точність:</strong> лише рядок «Точний штрихкод» підтверджений EAN/GTIN. Рядки «Ймовірно» та «Неточно» знайдені за назвою, мають відсоток схожості та можуть стосуватися іншого об’єму або варіанта. Перевіряйте їх за посиланням перед бізнес-рішенням.</p>
           <p>Пошук іде послідовно, тому його можна зупинити. Уже знайдені рядки не зникають і доступні в окремому Excel із листом «Джерела і точність».</p>
+          <p class="guide-note"><strong>Вибір джерел:</strong> у штрихкодному вікні можна вимкнути непотрібні магазини. MAKEUP залишається обов’язковим точним джерелом. «Швидко» збирає основний каталог, «Повна перевірка» додатково відкриває варіанти та продавців і працює довше.</p>
         </section>
         <section id="guide-results" data-guide-section>
           <h3>4. Результати, фільтри та Excel</h3>
@@ -433,6 +479,7 @@
         <section id="guide-stop" data-guide-section>
           <h3>5. Зупинка та відновлення</h3>
           <p>Натисніть «Зупинити», якщо пошук більше не потрібен. Уже зібрані товари залишаться в таблиці та будуть доступні для Excel. Довгі пошуки періодично зберігають частковий результат, який можна відновити після аварійного закриття.</p>
+          <p>У багатомагазинних вікнах після часткової помилки з’являється «Повторити помилки». Повторно запускаються лише проблемні магазини, а вже зібрані рядки доповнюються й не видаляються, навіть якщо повтор теж не вдався.</p>
           <p class="guide-note">Rozetka з продавцями — найповільніший режим. Якщо продавці не потрібні, вимкніть галочку до запуску.</p>
         </section>
         <section id="guide-lists" data-guide-section>
@@ -485,7 +532,7 @@
       </div>
       <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
-    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період і експортує повний звіт без інтернет-пошуку. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.</p>
+    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.</p>
     <div class="capabilities-table-wrap">
       <table class="capabilities-table">
         <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти</th><th>Штрихкоди</th><th>Особливості</th></tr></thead>
@@ -501,7 +548,7 @@
     </div>
     <div class="capabilities-plans">
       <strong>Що ще в плані</strong>
-      <span>Надійний EAN/GTIN для магазинів, які зараз не віддають його публічно, історія цін без обмеження архівом, запуск за розкладом і один моніторинг торгової марки одразу по кількох магазинах.</span>
+      <span>Надійний EAN/GTIN для магазинів, які зараз не віддають його публічно, база підтверджених відповідностей штрихкодів, історія цін без обмеження архівом і запуск за розкладом.</span>
     </div>
     <form method="dialog" class="capabilities-footer"><button class="primary-button" type="submit">Зрозуміло</button></form>
   </dialog>
@@ -511,6 +558,7 @@
   <script src="comparison.js"></script>
   <script src="archive-tools.js"></script>
   <script src="result-view.js"></script>
+  <script src="multi-store-search.js"></script>
   <script src="cross-store-barcode.js"></script>
   <script src="renderer.js"></script>
 </body>

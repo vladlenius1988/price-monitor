@@ -15,6 +15,7 @@ const { buildPriceHistoryWorkbook } = require('./price-history-export');
 const { buildCombinedArchiveWorkbook, buildFilteredArchiveWorkbook } = require('./multi-store-export');
 const { buildCrossStoreChangeReport, buildChangeReportWorkbook } = require('./change-report');
 const { buildCrossStoreBarcodeWorkbook } = require('./cross-store-barcode-export');
+const { buildMultiStoreLiveWorkbook } = require('./multi-store-live-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
@@ -744,6 +745,20 @@ function registerIpcHandlers() {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Зберегти порівняння цін за штрихкодом',
       defaultPath: `price_monitor_barcode_${barcode || 'товар'}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const buffer = await writeExcelFile(sheets).toBuffer();
+    await fs.promises.writeFile(result.filePath, buffer);
+    return result.filePath;
+  });
+
+  ipcMain.handle('products:export-multi-store-live', async (_event, payload = {}) => {
+    const sheets = buildMultiStoreLiveWorkbook(payload);
+    const query = safeFilePart(payload.query) || 'brands';
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Зберегти моніторинг кількох магазинів',
+      defaultPath: `price_monitor_multi_${query}_${new Date().toISOString().slice(0, 10)}.xlsx`,
       filters: [{ name: 'Excel', extensions: ['xlsx'] }],
     });
     if (result.canceled || !result.filePath) return null;

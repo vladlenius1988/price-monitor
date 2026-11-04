@@ -131,6 +131,25 @@ const barcodeMonitorEmpty = document.getElementById('barcode-monitor-empty');
 const barcodeMonitorTableWrap = document.getElementById('barcode-monitor-table-wrap');
 const barcodeMonitorRows = document.getElementById('barcode-monitor-rows');
 const barcodeMonitorExport = document.getElementById('barcode-monitor-export');
+const barcodeMonitorMode = document.getElementById('barcode-monitor-mode');
+const barcodeMonitorStorePicker = document.getElementById('barcode-monitor-store-picker');
+const barcodeMonitorRetry = document.getElementById('barcode-monitor-retry');
+const showMultiStoreMonitorButton = document.getElementById('show-multi-store-monitor');
+const multiStoreMonitorDialog = document.getElementById('multi-store-monitor-dialog');
+const multiStoreMonitorQuery = document.getElementById('multi-store-monitor-query');
+const multiStoreMonitorMode = document.getElementById('multi-store-monitor-mode');
+const multiStoreMonitorStorePicker = document.getElementById('multi-store-monitor-store-picker');
+const multiStoreMonitorStart = document.getElementById('multi-store-monitor-start');
+const multiStoreMonitorCancel = document.getElementById('multi-store-monitor-cancel');
+const multiStoreMonitorClose = document.getElementById('multi-store-monitor-close');
+const multiStoreMonitorRetry = document.getElementById('multi-store-monitor-retry');
+const multiStoreMonitorExport = document.getElementById('multi-store-monitor-export');
+const multiStoreMonitorStatus = document.getElementById('multi-store-monitor-status');
+const multiStoreMonitorSpinner = document.getElementById('multi-store-monitor-spinner');
+const multiStoreMonitorStores = document.getElementById('multi-store-monitor-stores');
+const multiStoreMonitorEmpty = document.getElementById('multi-store-monitor-empty');
+const multiStoreMonitorTableWrap = document.getElementById('multi-store-monitor-table-wrap');
+const multiStoreMonitorRows = document.getElementById('multi-store-monitor-rows');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -188,6 +207,7 @@ const resultViewUtils = window.priceMonitorResultView;
 const comparisonUtils = window.priceMonitorComparison;
 const archiveTools = window.priceMonitorArchiveTools;
 const crossStoreBarcodeUtils = window.priceMonitorCrossStoreBarcode;
+const multiStoreSearchUtils = window.priceMonitorMultiStoreSearch;
 const parserAvailable = Boolean(parserApi?.parseBrand && parserApi?.exportExcel && batchUtils?.runBrandBatch);
 const savedListsAvailable = Boolean(savedListUtils?.parseSavedLists && savedListUtils?.upsertSavedList);
 const searchHistoryAvailable = Boolean(searchHistoryUtils?.parseSearchHistory && searchHistoryUtils?.addSearchHistory);
@@ -222,7 +242,25 @@ const crossBarcodeState = {
   products: [],
   reports: [],
   capturedAt: '',
+  selectedStores: [],
+  mode: 'fast',
 };
+const multiStoreState = {
+  running: false,
+  cancelled: false,
+  currentStore: '',
+  query: '',
+  queries: [],
+  mode: 'fast',
+  selectedStores: [],
+  products: [],
+  reports: [],
+  capturedAt: '',
+  demoLimitReached: false,
+};
+
+const BARCODE_STORE_PREFERENCE_KEY = 'price-monitor:barcode-stores:v1';
+const MULTI_STORE_PREFERENCE_KEY = 'price-monitor:multi-stores:v1';
 
 storeButtons.forEach((button) => {
   button.addEventListener('click', () => selectStore(button.dataset.store));
@@ -278,6 +316,7 @@ activationCodeInput.addEventListener('keydown', (event) => {
 cancelButton.addEventListener('click', async () => {
   if (!parserAvailable) return showLaunchHint();
   if (crossBarcodeState.running) return cancelCrossStoreBarcodeSearch();
+  if (multiStoreState.running) return cancelMultiStoreSearch();
   state.cancelRequested = true;
   cancelButton.disabled = true;
   setStatus('Зупиняю пошук…', 'loading');
@@ -298,7 +337,10 @@ showGuideButton.addEventListener('click', openGuide);
 showBarcodeMonitorButton.addEventListener('click', openBarcodeMonitor);
 barcodeMonitorStart.addEventListener('click', startCrossStoreBarcodeSearch);
 barcodeMonitorCancel.addEventListener('click', cancelCrossStoreBarcodeSearch);
+barcodeMonitorRetry.addEventListener('click', retryCrossStoreBarcodeErrors);
 barcodeMonitorExport.addEventListener('click', exportCrossStoreBarcodeResults);
+barcodeMonitorMode.addEventListener('change', saveBarcodeMonitorPreferences);
+barcodeMonitorStorePicker.addEventListener('change', saveBarcodeMonitorPreferences);
 barcodeMonitorQuery.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -307,6 +349,22 @@ barcodeMonitorQuery.addEventListener('keydown', (event) => {
 });
 barcodeMonitorDialog.addEventListener('cancel', (event) => {
   if (crossBarcodeState.running) event.preventDefault();
+});
+showMultiStoreMonitorButton.addEventListener('click', openMultiStoreMonitor);
+multiStoreMonitorStart.addEventListener('click', startMultiStoreSearch);
+multiStoreMonitorCancel.addEventListener('click', cancelMultiStoreSearch);
+multiStoreMonitorRetry.addEventListener('click', retryMultiStoreErrors);
+multiStoreMonitorExport.addEventListener('click', exportMultiStoreResults);
+multiStoreMonitorMode.addEventListener('change', saveMultiStorePreferences);
+multiStoreMonitorStorePicker.addEventListener('change', saveMultiStorePreferences);
+multiStoreMonitorQuery.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    startMultiStoreSearch();
+  }
+});
+multiStoreMonitorDialog.addEventListener('cancel', (event) => {
+  if (multiStoreState.running) event.preventDefault();
 });
 saveDiagnosticsButton.addEventListener('click', exportDiagnostics);
 sendDiagnosticsButton.addEventListener('click', sendDiagnostics);
@@ -378,6 +436,10 @@ initializeAppInfo().catch(() => {});
 
 if (parserAvailable) {
   parserApi.onProgress((progress) => {
+    if (multiStoreState.running && progress.store === multiStoreState.currentStore) {
+      setMultiStoreStatus(`${storeName(progress.store)} · ${progress.message || 'Триває перевірка…'}`, progress.phase === 'error' ? 'error' : 'loading');
+      return;
+    }
     if (crossBarcodeState.running && progress.store === crossBarcodeState.currentStore) {
       setBarcodeMonitorStatus(`${storeName(progress.store)} · ${progress.message || 'Триває перевірка…'}`, progress.phase === 'error' ? 'error' : 'loading');
       return;
@@ -1882,11 +1944,77 @@ function looksLikeBarcodeInput(value) {
   return /^\d+$/.test(compact) && [8, 12, 13, 14].includes(compact.length);
 }
 
+function allowedMultiStoreIds() {
+  const order = multiStoreSearchUtils?.STORE_ORDER || ['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka'];
+  if (!accessStatus.isLicensed || !Array.isArray(accessStatus.stores)) return [...order];
+  return order.filter((store) => accessStatus.stores.includes(store));
+}
+
+function readMonitorPreference(key, fallbackStores, fallbackMode = 'fast') {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
+    return {
+      stores: Array.isArray(value.stores) ? value.stores : fallbackStores,
+      mode: value.mode === 'detailed' ? 'detailed' : fallbackMode,
+    };
+  } catch (_error) {
+    return { stores: fallbackStores, mode: fallbackMode };
+  }
+}
+
+function renderMonitorStorePicker(container, selected, { required = [] } = {}) {
+  const allowed = allowedMultiStoreIds();
+  const selectedSet = new Set(selected);
+  const requiredSet = new Set(required);
+  container.replaceChildren(...allowed.map((store) => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = store;
+    input.checked = selectedSet.has(store) || requiredSet.has(store);
+    input.disabled = requiredSet.has(store);
+    const text = document.createElement('span');
+    text.textContent = storeName(store);
+    label.append(input, text);
+    return label;
+  }));
+}
+
+function selectedMonitorStores(container, { required = [] } = {}) {
+  const values = [...container.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+  return multiStoreSearchUtils.normalizeStoreSelection(values, allowedMultiStoreIds(), { required });
+}
+
+function saveBarcodeMonitorPreferences() {
+  const stores = selectedMonitorStores(barcodeMonitorStorePicker, { required: ['makeup'] });
+  localStorage.setItem(BARCODE_STORE_PREFERENCE_KEY, JSON.stringify({ stores, mode: barcodeMonitorMode.value }));
+}
+
+function saveMultiStorePreferences() {
+  const stores = selectedMonitorStores(multiStoreMonitorStorePicker);
+  localStorage.setItem(MULTI_STORE_PREFERENCE_KEY, JSON.stringify({ stores, mode: multiStoreMonitorMode.value }));
+}
+
+function validateMultiStoreDemoCalls(stores, queryCount, setMessage) {
+  if (!accessStatus.isDemo) return true;
+  const callCount = multiStoreSearchUtils.totalParseCalls(stores, Array.from({ length: queryCount }));
+  const maximum = Math.max(1, Number(accessStatus.maxBrands) || 3);
+  if (callCount <= maximum) return true;
+  setMessage(`Демо дозволяє до ${maximum} звернень до магазинів за один запуск. Зараз: ${stores.length} × ${queryCount} = ${callCount}. Зменште кількість магазинів або марок.`, 'error');
+  return false;
+}
+
 function openBarcodeMonitor() {
-  if (!crossStoreBarcodeUtils || typeof parserApi?.exportCrossStoreBarcode !== 'function') {
+  if (!crossStoreBarcodeUtils || !multiStoreSearchUtils || typeof parserApi?.exportCrossStoreBarcode !== 'function') {
     setStatus('Міжмагазинний пошук за штрихкодом недоступний у цій збірці.', 'error');
     return;
   }
+  const allowed = allowedMultiStoreIds();
+  const defaults = ['makeup', 'eva', 'notino'].filter((store) => allowed.includes(store));
+  const preference = readMonitorPreference(BARCODE_STORE_PREFERENCE_KEY, defaults.length ? defaults : allowed);
+  const selected = multiStoreSearchUtils.normalizeStoreSelection(preference.stores, allowed, { required: ['makeup'] });
+  renderMonitorStorePicker(barcodeMonitorStorePicker, selected, { required: ['makeup'] });
+  barcodeMonitorMode.value = preference.mode;
   const currentBarcode = crossStoreBarcodeUtils.normalizeBarcode(brandInput.value);
   if (currentBarcode) barcodeMonitorQuery.value = currentBarcode;
   renderCrossStoreBarcodeResults();
@@ -1896,21 +2024,47 @@ function openBarcodeMonitor() {
 }
 
 async function startCrossStoreBarcodeSearch() {
-  if (!parserAvailable || !crossStoreBarcodeUtils || state.parsing) return;
+  if (!parserAvailable || !crossStoreBarcodeUtils || !multiStoreSearchUtils || state.parsing) return;
   const barcode = crossStoreBarcodeUtils.normalizeBarcode(barcodeMonitorQuery.value);
   if (!barcode) {
     setBarcodeMonitorStatus('Штрихкод має містити 8, 12, 13 або 14 цифр і правильну контрольну цифру.', 'error');
     barcodeMonitorQuery.focus();
     return;
   }
-  let stores = crossStoreBarcodeUtils.STORE_ORDER.filter((store) => (
-    !accessStatus.isLicensed || !Array.isArray(accessStatus.stores) || accessStatus.stores.includes(store)
-  ));
+  if (!allowedMultiStoreIds().includes('makeup')) {
+    setBarcodeMonitorStatus('Для точного старту ліцензія має містити модуль MAKEUP.', 'error');
+    return;
+  }
+  const selected = selectedMonitorStores(barcodeMonitorStorePicker, { required: ['makeup'] });
+  let stores = ['makeup', ...selected.filter((store) => store !== 'makeup')];
   if (!stores.includes('makeup')) {
     setBarcodeMonitorStatus('Для точного старту потрібен модуль MAKEUP: саме він підтверджує EAN/GTIN у картці товару.', 'error');
     return;
   }
-  if (accessStatus.isDemo) stores = stores.slice(0, Math.max(1, Number(accessStatus.maxBrands) || 3));
+  if (!stores.length) {
+    setBarcodeMonitorStatus('Оберіть хоча б один магазин.', 'error');
+    return;
+  }
+  if (!validateMultiStoreDemoCalls(stores, 1, setBarcodeMonitorStatus)) return;
+  saveBarcodeMonitorPreferences();
+  await runCrossStoreBarcodeSearch(barcode, stores, { reset: true });
+}
+
+async function retryCrossStoreBarcodeErrors() {
+  if (state.parsing || !crossBarcodeState.barcode || !crossBarcodeState.selectedStores.length) return;
+  const failed = multiStoreSearchUtils.failedStoreIds(crossBarcodeState.reports);
+  const stores = crossBarcodeState.reference
+    ? failed
+    : crossBarcodeState.selectedStores;
+  if (!stores.length) return setBarcodeMonitorStatus('Немає магазинів із помилками для повторної перевірки.', 'idle');
+  if (!validateMultiStoreDemoCalls(stores, 1, setBarcodeMonitorStatus)) return;
+  await runCrossStoreBarcodeSearch(crossBarcodeState.barcode, stores, { reset: false });
+}
+
+async function runCrossStoreBarcodeSearch(barcode, requestedStores, { reset }) {
+  const stores = ['makeup', ...requestedStores.filter((store) => store !== 'makeup')]
+    .filter((store, index, values) => values.indexOf(store) === index)
+    .filter((store) => reset || !crossBarcodeState.reference || requestedStores.includes(store));
 
   let searchAccess = { allowed: true, token: '', status: accessStatus };
   if (typeof parserApi?.beginSearchAccess === 'function') {
@@ -1923,10 +2077,21 @@ async function startCrossStoreBarcodeSearch() {
   }
 
   const accessToken = String(searchAccess.token || '');
-  Object.assign(crossBarcodeState, {
-    running: true, cancelled: false, currentStore: 'makeup', barcode,
-    reference: null, searchQuery: '', products: [], reports: [], capturedAt: new Date().toISOString(),
-  });
+  const selectedStores = reset ? stores : crossBarcodeState.selectedStores;
+  if (reset) {
+    Object.assign(crossBarcodeState, {
+      barcode, reference: null, searchQuery: '', products: [],
+      reports: selectedStores.map((store) => ({
+        store, storeLabel: storeName(store), status: 'pending', statusLabel: 'Очікує перевірки', matchCount: 0,
+      })),
+      capturedAt: new Date().toISOString(), selectedStores, mode: barcodeMonitorMode.value,
+    });
+  } else {
+    for (const store of stores) {
+      updateCrossStoreReport({ store, storeLabel: storeName(store), status: 'pending', statusLabel: 'Очікує повторної перевірки', matchCount: 0 });
+    }
+  }
+  Object.assign(crossBarcodeState, { running: true, cancelled: false, currentStore: stores[0] || '' });
   state.parsing = true;
   state.cancelRequested = false;
   pendingStore = null;
@@ -1940,6 +2105,7 @@ async function startCrossStoreBarcodeSearch() {
       if (crossBarcodeState.cancelled) break;
       crossBarcodeState.currentStore = store;
       const isExactSource = store === 'makeup';
+      if (!isExactSource && !crossBarcodeState.reference) break;
       const query = isExactSource ? barcode : crossBarcodeState.searchQuery;
       updateCrossStoreReport({
         store, storeLabel: storeName(store), query, status: 'loading',
@@ -1950,13 +2116,12 @@ async function startCrossStoreBarcodeSearch() {
       let outcome = 'error';
       let errorCode = 'search_error';
       try {
+        const detailOptions = multiStoreSearchUtils.searchOptions(store, crossBarcodeState.mode, { barcodeReference: true });
         const result = await parserApi.parseBrand(store, query, {
           accessToken,
           productSearch: !isExactSource,
           productSearchBrand: isExactSource ? '' : crossBarcodeState.reference?.brand || '',
-          includeVariants: ['makeup', 'eva', 'notino', 'aurora'].includes(store),
-          includeSellers: store === 'rozetka',
-          includeBarcodes: isExactSource,
+          ...detailOptions,
         });
         if (crossBarcodeState.cancelled || result?.cancelled) break;
         if (isExactSource) {
@@ -1977,7 +2142,11 @@ async function startCrossStoreBarcodeSearch() {
             { store, storeLabel: storeName(store), minimumScore: 0.4, limit: 8 },
           );
         }
-        crossBarcodeState.products.push(...selected);
+        crossBarcodeState.products = (reset
+          ? multiStoreSearchUtils.replaceStoreProducts
+          : multiStoreSearchUtils.mergeStoreProducts)(
+          crossBarcodeState.products, store, selected, storeName(store),
+        );
         outcome = 'success';
         errorCode = '';
         updateCrossStoreReport({
@@ -2018,7 +2187,7 @@ async function startCrossStoreBarcodeSearch() {
         .filter((report) => report.status === 'error')
         .map((report) => report.storeLabel || storeName(report.store));
       const demoNote = accessStatus.isDemo
-        ? ` У демо перевірено ${stores.length} ${ukPlural(stores.length, 'магазин', 'магазини', 'магазинів')}.`
+        ? ` У цьому запуску перевірено ${stores.length} ${ukPlural(stores.length, 'магазин', 'магазини', 'магазинів')}.`
         : '';
       const matchSummary = `${exact} ${ukPlural(exact, 'точний збіг', 'точні збіги', 'точних збігів')} і ${probable} ${ukPlural(probable, 'неточний збіг', 'неточні збіги', 'неточних збігів')}`;
       const failureNote = failedStores.length ? ` Не вдалося перевірити: ${failedStores.join(', ')}.` : '';
@@ -2136,15 +2305,20 @@ function renderCrossStoreBarcodeResults() {
   barcodeMonitorTableWrap.hidden = !crossBarcodeState.products.length;
   barcodeMonitorEmpty.hidden = Boolean(crossBarcodeState.products.length || crossBarcodeState.running || crossBarcodeState.reports.length);
   barcodeMonitorExport.disabled = crossBarcodeState.running || !crossBarcodeState.products.length;
+  barcodeMonitorRetry.hidden = crossBarcodeState.running
+    || !(multiStoreSearchUtils?.failedStoreIds(crossBarcodeState.reports).length);
 }
 
 function setBarcodeMonitorBusy(busy) {
   barcodeMonitorQuery.disabled = busy;
+  barcodeMonitorMode.disabled = busy;
+  barcodeMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = busy || input.value === 'makeup'; });
   barcodeMonitorStart.hidden = busy;
   barcodeMonitorStart.disabled = busy || isAccessBlocked();
   barcodeMonitorCancel.hidden = !busy;
   barcodeMonitorCancel.disabled = false;
   barcodeMonitorClose.disabled = busy;
+  barcodeMonitorRetry.disabled = busy;
   barcodeMonitorDialog.querySelectorAll('form[method="dialog"] button').forEach((button) => { button.disabled = busy; });
   barcodeMonitorSpinner.hidden = !busy;
 }
@@ -2152,6 +2326,313 @@ function setBarcodeMonitorBusy(busy) {
 function setBarcodeMonitorStatus(message, type = 'idle') {
   barcodeMonitorStatus.textContent = message;
   barcodeMonitorStatus.dataset.type = type;
+}
+
+function openMultiStoreMonitor() {
+  if (!multiStoreSearchUtils || typeof parserApi?.exportMultiStoreLive !== 'function') {
+    setStatus('Багатомагазинний моніторинг недоступний у цій збірці.', 'error');
+    return;
+  }
+  const allowed = allowedMultiStoreIds();
+  const defaults = ['eva', 'makeup', 'notino'].filter((store) => allowed.includes(store));
+  const preference = readMonitorPreference(MULTI_STORE_PREFERENCE_KEY, defaults.length ? defaults : allowed.slice(0, 2));
+  const selected = multiStoreSearchUtils.normalizeStoreSelection(preference.stores, allowed);
+  renderMonitorStorePicker(multiStoreMonitorStorePicker, selected);
+  multiStoreMonitorMode.value = preference.mode;
+  if (!multiStoreMonitorQuery.value.trim() && brandInput.value.trim() && !looksLikeBarcodeInput(brandInput.value)) {
+    multiStoreMonitorQuery.value = brandInput.value;
+  }
+  renderMultiStoreResults();
+  multiStoreMonitorDialog.showModal();
+  multiStoreMonitorQuery.focus();
+  multiStoreMonitorQuery.select();
+}
+
+async function startMultiStoreSearch() {
+  if (!parserAvailable || !multiStoreSearchUtils || state.parsing) return;
+  const queries = batchUtils.splitBrandQueries(multiStoreMonitorQuery.value);
+  if (!queries.length) {
+    setMultiStoreStatus('Введіть одну або кілька торгових марок.', 'error');
+    multiStoreMonitorQuery.focus();
+    return;
+  }
+  const stores = selectedMonitorStores(multiStoreMonitorStorePicker);
+  if (stores.length < 2) {
+    setMultiStoreStatus('Оберіть щонайменше два магазини.', 'error');
+    return;
+  }
+  if (!validateMultiStoreDemoCalls(stores, queries.length, setMultiStoreStatus)) return;
+  saveMultiStorePreferences();
+  await runMultiStoreSearch(stores, queries, { reset: true });
+}
+
+async function retryMultiStoreErrors() {
+  if (state.parsing || !multiStoreState.queries.length) return;
+  const stores = multiStoreSearchUtils.failedStoreIds(multiStoreState.reports);
+  if (!stores.length) return setMultiStoreStatus('Немає магазинів із помилками для повторної перевірки.', 'idle');
+  if (!validateMultiStoreDemoCalls(stores, multiStoreState.queries.length, setMultiStoreStatus)) return;
+  await runMultiStoreSearch(stores, multiStoreState.queries, { reset: false });
+}
+
+async function runMultiStoreSearch(stores, queries, { reset }) {
+  const parseCalls = multiStoreSearchUtils.totalParseCalls(stores, queries);
+  let searchAccess = { allowed: true, token: '', status: accessStatus };
+  if (typeof parserApi?.beginSearchAccess === 'function') {
+    searchAccess = await parserApi.beginSearchAccess(stores[0], parseCalls).catch(() => null);
+    if (searchAccess?.status) updateAccessUi(searchAccess.status);
+  }
+  if (!searchAccess?.allowed) {
+    setMultiStoreStatus(accessDeniedMessage(searchAccess?.reason, searchAccess?.status), 'error');
+    return;
+  }
+  const accessToken = String(searchAccess.token || '');
+  if (reset) {
+    Object.assign(multiStoreState, {
+      query: multiStoreMonitorQuery.value.trim(), queries: [...queries], mode: multiStoreMonitorMode.value,
+      selectedStores: [...stores], products: [], capturedAt: new Date().toISOString(),
+      demoLimitReached: false,
+      reports: stores.map((store) => ({
+        store, storeLabel: storeName(store), status: 'pending', statusLabel: 'Очікує перевірки',
+        productCount: 0, failureCount: 0,
+      })),
+    });
+  } else {
+    for (const store of stores) {
+      updateMultiStoreReport({
+        store, storeLabel: storeName(store), status: 'pending', statusLabel: 'Очікує повторної перевірки',
+        productCount: 0, failureCount: 0,
+      });
+    }
+  }
+  Object.assign(multiStoreState, { running: true, cancelled: false, currentStore: stores[0] || '' });
+  state.parsing = true;
+  state.cancelRequested = false;
+  pendingStore = null;
+  setControlsBusy(true);
+  setMultiStoreBusy(true);
+  renderMultiStoreResults();
+  setMultiStoreStatus(`Починаю перевірку: ${stores.map(storeName).join(', ')}…`, 'loading');
+
+  try {
+    for (const store of stores) {
+      if (multiStoreState.cancelled) break;
+      multiStoreState.currentStore = store;
+      updateMultiStoreReport({
+        store, storeLabel: storeName(store), status: 'loading', statusLabel: 'Завантажую каталог…',
+        productCount: 0, failureCount: 0,
+      });
+      const startedAt = Date.now();
+      let storeProducts = [];
+      let outcome = 'error';
+      let errorCode = 'search_error';
+      try {
+        const detailOptions = multiStoreSearchUtils.searchOptions(store, multiStoreState.mode);
+        const result = await batchUtils.runBrandBatch(
+          queries,
+          async (query) => {
+            const result = await parserApi.parseBrand(store, query, {
+              accessToken,
+              ...detailOptions,
+              previousProducts: storeProducts,
+              recoveryQuery: multiStoreState.query,
+            });
+            if (result?.demoLimitReached) multiStoreState.demoLimitReached = true;
+            return result;
+          },
+          {
+            shouldStop: () => multiStoreState.cancelled,
+            onStart: ({ query, index, total }) => {
+              setMultiStoreStatus(`${storeName(store)} · марка ${index + 1} із ${total} · «${query}»…`, 'loading');
+            },
+            onSuccess: ({ products }) => {
+              storeProducts = products;
+              multiStoreState.products = (reset
+                ? multiStoreSearchUtils.replaceStoreProducts
+                : multiStoreSearchUtils.mergeStoreProducts)(
+                multiStoreState.products, store, storeProducts, storeName(store),
+              );
+              renderMultiStoreResults();
+            },
+          },
+        );
+        storeProducts = result.products;
+        if (multiStoreState.cancelled || result.stopped) {
+          updateMultiStoreReport({
+            store, storeLabel: storeName(store), status: storeProducts.length ? 'partial' : 'stopped',
+            statusLabel: `Зупинено · зібрано ${formatProductCount(storeProducts.length, store)}`,
+            productCount: storeProducts.length, failureCount: result.failures.length,
+          });
+          outcome = 'cancelled';
+          errorCode = 'user_cancelled';
+          break;
+        }
+        multiStoreState.products = (reset
+          ? multiStoreSearchUtils.replaceStoreProducts
+          : multiStoreSearchUtils.mergeStoreProducts)(
+          multiStoreState.products, store, storeProducts, storeName(store),
+        );
+        const status = result.failures.length
+          ? (result.successes.length ? 'partial' : 'error')
+          : (storeProducts.length ? 'success' : 'empty');
+        const failedNames = result.failures.slice(0, 2).map((item) => item.query).join(', ');
+        const statusLabel = result.failures.length
+          ? result.successes.length
+            ? `${formatProductCount(storeProducts.length, store)} · не оброблено: ${failedNames}`
+            : result.failures[0]?.message || 'Не вдалося завантажити каталог'
+          : storeProducts.length ? `Готово · ${formatProductCount(storeProducts.length, store)}` : 'Доступних товарів не знайдено';
+        updateMultiStoreReport({
+          store, storeLabel: storeName(store), status, statusLabel,
+          productCount: storeProducts.length, failureCount: result.failures.length,
+        });
+        outcome = status === 'error' ? 'error' : 'success';
+        errorCode = result.failures.length ? classifyTelemetryError(result.failures[0]?.message) : '';
+      } catch (error) {
+        errorCode = classifyTelemetryError(error);
+        const retainedCount = multiStoreState.products.filter((product) => product.store === store).length;
+        updateMultiStoreReport({
+          store, storeLabel: storeName(store), status: 'error', statusLabel: batchUtils.cleanParserError(error),
+          productCount: retainedCount, failureCount: queries.length,
+        });
+      } finally {
+        parserApi.reportSearchTelemetry?.({
+          store,
+          outcome: multiStoreState.cancelled ? 'cancelled' : outcome,
+          durationMs: Date.now() - startedAt,
+          productCount: storeProducts.length,
+          errorCode: multiStoreState.cancelled ? 'user_cancelled' : errorCode,
+        }).catch(() => {});
+      }
+      renderMultiStoreResults();
+    }
+
+    if (multiStoreState.cancelled) {
+      setMultiStoreStatus(`Пошук зупинено. Збережено ${multiStoreState.products.length} рядків — їх можна експортувати.`, 'warning');
+    } else {
+      const failed = multiStoreSearchUtils.failedStoreIds(multiStoreState.reports);
+      const pending = multiStoreState.reports.filter((report) => report.status === 'pending').map((report) => report.storeLabel);
+      const problemStores = [...new Set([...failed.map(storeName), ...pending])];
+      const prefix = problemStores.length ? 'Завершено з помилками' : 'Готово';
+      const problemNote = problemStores.length ? ` Не вдалося повністю перевірити: ${problemStores.join(', ')}.` : '';
+      const limitNote = multiStoreState.demoLimitReached
+        ? ` Демо-ліміт: показано не більше ${accessStatus.maxResults || 1000} рядків.` : '';
+      setMultiStoreStatus(
+        `${prefix}: ${multiStoreState.products.length} ${ukPlural(multiStoreState.products.length, 'рядок', 'рядки', 'рядків')}.${problemNote}${limitNote}`,
+        problemStores.length || multiStoreState.demoLimitReached ? 'warning' : 'success',
+      );
+    }
+  } catch (error) {
+    if (!multiStoreState.cancelled) setMultiStoreStatus(batchUtils.cleanParserError(error), 'error');
+  } finally {
+    if (!multiStoreState.cancelled) await parserApi.clearRecovery?.().catch(() => {});
+    if (accessToken && typeof parserApi?.finishSearchAccess === 'function') {
+      const finished = await parserApi.finishSearchAccess(accessToken).catch(() => null);
+      if (finished?.status) updateAccessUi(finished.status);
+    }
+    multiStoreState.running = false;
+    multiStoreState.currentStore = '';
+    state.parsing = false;
+    state.cancelRequested = false;
+    setControlsBusy(false);
+    setMultiStoreBusy(false);
+    renderMultiStoreResults();
+  }
+}
+
+async function cancelMultiStoreSearch() {
+  if (!multiStoreState.running) return;
+  multiStoreState.cancelled = true;
+  state.cancelRequested = true;
+  multiStoreMonitorCancel.disabled = true;
+  cancelButton.disabled = true;
+  setMultiStoreStatus('Зупиняю поточний магазин і зберігаю вже знайдені рядки…', 'loading');
+  await parserApi.cancel().catch(() => {});
+}
+
+async function exportMultiStoreResults() {
+  if (!multiStoreState.products.length || typeof parserApi?.exportMultiStoreLive !== 'function') return;
+  multiStoreMonitorExport.disabled = true;
+  setMultiStoreStatus('Готую спільний Excel із джерелами та станом магазинів…', 'loading');
+  try {
+    const filePath = await parserApi.exportMultiStoreLive({
+      query: multiStoreState.query,
+      mode: multiStoreState.mode,
+      products: multiStoreState.products,
+      reports: multiStoreState.reports,
+      capturedAt: multiStoreState.capturedAt,
+      limited: multiStoreState.demoLimitReached,
+    });
+    setMultiStoreStatus(filePath ? `Excel збережено: ${filePath}` : 'Збереження скасовано.', filePath ? 'success' : 'idle');
+  } catch (error) {
+    setMultiStoreStatus(batchUtils.cleanParserError(error), 'error');
+  } finally {
+    multiStoreMonitorExport.disabled = multiStoreState.running || !multiStoreState.products.length;
+  }
+}
+
+function updateMultiStoreReport(report) {
+  const index = multiStoreState.reports.findIndex((item) => item.store === report.store);
+  if (index >= 0) multiStoreState.reports[index] = report;
+  else multiStoreState.reports.push(report);
+  renderMultiStoreResults();
+}
+
+function renderMultiStoreResults() {
+  multiStoreMonitorStores.hidden = !multiStoreState.reports.length;
+  multiStoreMonitorStores.replaceChildren(...multiStoreState.reports.map((report) => {
+    const item = document.createElement('div');
+    item.className = `barcode-monitor-store is-${report.status || 'idle'}`;
+    const title = document.createElement('strong');
+    title.textContent = report.storeLabel || storeName(report.store);
+    const detail = document.createElement('small');
+    detail.textContent = report.statusLabel || '';
+    item.append(title, detail);
+    return item;
+  }));
+  multiStoreMonitorRows.replaceChildren(...multiStoreState.products.map((product) => {
+    const row = document.createElement('tr');
+    const storeCell = textCell(product.storeLabel || storeName(product.store));
+    const productCell = document.createElement('td');
+    const link = document.createElement('a');
+    link.href = product.url || '#';
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.textContent = product.name || 'Товар';
+    productCell.append(link);
+    if (product.barcode) {
+      const code = document.createElement('small');
+      code.textContent = product.barcode;
+      productCell.append(code);
+    }
+    const variantCell = textCell([product.variant, product.seller].filter(Boolean).join(' · ') || '—');
+    const current = [product.priceWithDiscount, product.priceWithoutDiscount, product.currentPrice]
+      .find((value) => value !== null && value !== undefined && String(value).trim() !== '');
+    row.append(storeCell, productCell, textCell(product.brand), variantCell, priceCell(current), priceCell(product.priceWithoutDiscount));
+    return row;
+  }));
+  multiStoreMonitorTableWrap.hidden = !multiStoreState.products.length;
+  multiStoreMonitorEmpty.hidden = Boolean(multiStoreState.products.length || multiStoreState.running || multiStoreState.reports.length);
+  multiStoreMonitorExport.disabled = multiStoreState.running || !multiStoreState.products.length;
+  multiStoreMonitorRetry.hidden = multiStoreState.running
+    || !(multiStoreSearchUtils?.failedStoreIds(multiStoreState.reports).length);
+}
+
+function setMultiStoreBusy(busy) {
+  multiStoreMonitorQuery.disabled = busy;
+  multiStoreMonitorMode.disabled = busy;
+  multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = busy; });
+  multiStoreMonitorStart.hidden = busy;
+  multiStoreMonitorStart.disabled = busy || isAccessBlocked();
+  multiStoreMonitorCancel.hidden = !busy;
+  multiStoreMonitorCancel.disabled = false;
+  multiStoreMonitorClose.disabled = busy;
+  multiStoreMonitorRetry.disabled = busy;
+  multiStoreMonitorDialog.querySelectorAll('form[method="dialog"] button').forEach((button) => { button.disabled = busy; });
+  multiStoreMonitorSpinner.hidden = !busy;
+}
+
+function setMultiStoreStatus(message, type = 'idle') {
+  multiStoreMonitorStatus.textContent = message;
+  multiStoreMonitorStatus.dataset.type = type;
 }
 
 function classifyTelemetryError(value) {
@@ -2764,6 +3245,7 @@ function updateResultMeta(processed, total) {
 function setControlsBusy(busy) {
   showArchiveButton.disabled = busy;
   showBarcodeMonitorButton.disabled = busy;
+  showMultiStoreMonitorButton.disabled = busy;
   showChangeReportButton.disabled = busy;
   saveDiagnosticsButton.disabled = busy;
   sendDiagnosticsButton.disabled = busy;

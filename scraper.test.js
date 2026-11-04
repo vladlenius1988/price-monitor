@@ -1042,7 +1042,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.29.0');
+  assert.equal(packageJson.version, '4.30.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1052,7 +1052,40 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
+  assert.ok(packageJson.build.files.includes('multi-store-search.js'));
+  assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
   assert.deepEqual(packageJson.build.win.target, ['nsis']);
+});
+
+test('runs selected stores together, retries failures and exports one workbook', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+  const clientConfigs = [
+    'electron-builder.cloud-client.yml', 'electron-builder.demo.yml', 'electron-builder.licensed.yml',
+    'electron-builder.local-client.yml', 'electron-builder.production-client.yml', 'electron-builder.remote-client.yml',
+  ];
+  assert.ok(html.indexOf('<script src="multi-store-search.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
+  assert.match(html, /id="show-multi-store-monitor"/);
+  assert.match(html, /id="multi-store-monitor-store-picker"/);
+  assert.match(html, /id="multi-store-monitor-retry"/);
+  assert.match(html, /id="barcode-monitor-store-picker"/);
+  assert.match(html, /id="barcode-monitor-retry"/);
+  assert.match(renderer, /async function runMultiStoreSearch/);
+  assert.match(renderer, /failedStoreIds\(multiStoreState\.reports\)/);
+  assert.match(renderer, /validateMultiStoreDemoCalls/);
+  assert.match(renderer, /async function retryCrossStoreBarcodeErrors/);
+  assert.match(preload, /exportMultiStoreLive: \(payload\) => ipcRenderer\.invoke\('products:export-multi-store-live'/);
+  assert.match(main, /ipcMain\.handle\('products:export-multi-store-live'/);
+  assert.ok(packageJson.build.files.includes('multi-store-search.js'));
+  assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
+  for (const configName of clientConfigs) {
+    const config = fs.readFileSync(path.join(__dirname, configName), 'utf8');
+    assert.match(config, /- multi-store-search\.js/, configName);
+    assert.match(config, /- multi-store-live-export\.js/, configName);
+  }
 });
 
 test('compares one valid barcode across stores and exports a clearly qualified report', () => {

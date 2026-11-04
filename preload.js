@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('priceParser', {
   clearRecovery: () => ipcRenderer.invoke('products:recovery:clear'),
   exportExcel: (payload) => ipcRenderer.invoke('products:export', payload),
   exportCrossStoreBarcode: (payload) => ipcRenderer.invoke('products:export-cross-store-barcode', payload),
+  exportMultiStoreLive: (payload) => ipcRenderer.invoke('products:export-multi-store-live', payload),
   exportSavedLists: (payload) => ipcRenderer.invoke('saved-lists:export', payload),
   importSavedLists: () => ipcRenderer.invoke('saved-lists:import'),
   getComparisonSnapshot: (key) => ipcRenderer.invoke('comparison:get', { key }),
