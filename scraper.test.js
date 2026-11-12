@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   PriceScraper, STORES, normalizeText, normalizeBarcode, looksLikeBarcodeInput, rankBrands,
-  expandAuroraProducts, expandMakeupVariantData, findMakeupBarcodeVariant,
+  expandAuroraProducts, expandMakeupVariantData, findMakeupBarcodeVariant, fetchMakeupVariantBarcodes,
+  brandNamesMatch,
   deduplicateProducts, isRetryableLoadError,
 } = require('./scraper');
 const {
@@ -79,6 +80,10 @@ function workbookXmlEntries(buffer) {
 
 test('normalizes punctuation and letter case in brand names', () => {
   assert.equal(normalizeText('L’Oréal Paris'), normalizeText("l'oreal paris"));
+  assert.equal(normalizeText('Estée Lauder'), normalizeText('Estee Lauder'));
+  assert.equal(normalizeText('Lancôme Kérastase'), normalizeText('Lancome Kerastase'));
+  assert.equal(normalizeText('Ziaja Łagodząca'), normalizeText('Ziaja Lagodzaca'));
+  assert.equal(normalizeText('MØD æther Œuvre'), normalizeText('MOD aether Oeuvre'));
 });
 
 test('keeps only valid EAN/GTIN values and preserves leading zeroes', () => {
@@ -710,6 +715,41 @@ test('ranks a brand with a small typo first', () => {
   assert.ok(result[0].score > 0.7);
 });
 
+test('ranks accented and Cyrillic spellings as the same international brand', () => {
+  const brands = [
+    { name: 'Estée Lauder', url: 'https://www.notino.ua/estee-lauder/' },
+    { name: 'Revolution', url: 'https://www.notino.ua/makeup-revolution/' },
+  ];
+  assert.equal(rankBrands(brands, 'Estee Lauder')[0].item.name, 'Estée Lauder');
+  assert.equal(rankBrands(brands, 'Есте Лаудер')[0].item.name, 'Estée Lauder');
+  assert.equal(rankBrands(brands, 'Эсти Лаудер')[0].item.name, 'Estée Lauder');
+});
+
+test('falls back to a verified Notino search when its brand directory is unavailable', async () => {
+  const scraper = new PriceScraper({
+    BrowserWindow: function BrowserWindow() {},
+    cacheFile: path.join(os.tmpdir(), 'unused-price-monitor-notino-cache.json'),
+  });
+  scraper.ensureBrands = async () => [
+    { name: 'Estée Lauder', url: 'https://www.notino.ua/estee-lauder/' },
+    { name: 'Revolution', url: 'https://www.notino.ua/makeup-revolution/' },
+  ];
+  const missing = await scraper.resolveBrand('notino', 'Stars from the Stars');
+  assert.equal(missing.verifyBrand, true);
+  assert.match(missing.url, /search\.asp\?exps=Stars%20from%20the%20Stars$/);
+  const accented = await scraper.resolveBrand('notino', 'Estee Lauder');
+  assert.equal(accented.name, 'Estée Lauder');
+  assert.equal(accented.url, 'https://www.notino.ua/estee-lauder/');
+});
+
+test('verifies broad Notino results by the requested brand without losing accents', () => {
+  assert.equal(brandNamesMatch('Estée Lauder', 'Estee Lauder'), true);
+  assert.equal(brandNamesMatch('Estée Lauder', 'Есте Лаудер'), true);
+  assert.equal(brandNamesMatch('Makeup Revolution', 'Revolution'), true);
+  assert.equal(brandNamesMatch('Uriage', 'Stars from the Stars'), false);
+  assert.equal(brandNamesMatch('Estée Lauder', 'Stars from the Stars'), false);
+});
+
 test('removes duplicated products by URL', () => {
   const products = [
     { name: 'Товар 1', brand: 'Марка', url: 'https://example.com/1' },
@@ -926,6 +966,40 @@ test('assigns a MAKEUP barcode only to the exact default variant', () => {
   assert.equal(products[1].barcode, '');
 });
 
+test('assigns every verified MAKEUP variant barcode to its own shade row', async () => {
+  const variants = [
+    { id: 'red', title: '01 Red', inStock: true, current: 300 },
+    { id: 'pink', title: '02 Pink', inStock: true, current: 320 },
+    { id: 'gone', title: '03 Gone', inStock: false, current: 310 },
+  ];
+  const expected = { red: '5901234123457', pink: '4006381333931' };
+  const requestedUrls = [];
+  const previousLocation = global.location;
+  global.location = { origin: 'https://makeup.com.ua' };
+  let fetched;
+  try {
+    fetched = await fetchMakeupVariantBarcodes('product-1', variants, async (url) => {
+      requestedUrls.push(url);
+      const id = new URL(url).searchParams.get('variant');
+      return { ok: true, json: async () => ({ meta: { gtin13: expected[id] || '' } }) };
+    });
+  } finally {
+    global.location = previousLocation;
+  }
+  assert.deepEqual(fetched, expected);
+  assert.equal(requestedUrls.length, 2);
+
+  const rows = expandMakeupVariantData(
+    { name: 'Помада', brand: 'Test', url: 'https://makeup.com.ua/ua/product/1/' },
+    { id: 'product-1', name: 'Помада', brand: 'Test', hasVariants: true, variants, variantBarcodes: fetched },
+    { includeVariants: true, includeBarcodes: true },
+  );
+  assert.deepEqual(rows.map((row) => [row.variant, row.barcode]), [
+    ['01 Red', '5901234123457'],
+    ['02 Pink', '4006381333931'],
+  ]);
+});
+
 test('labels the exact MAKEUP variant when collecting only its barcode', () => {
   const products = expandMakeupVariantData({
     name: 'Блиск', brand: 'Maybelline New York', url: 'https://makeup.com.ua/ua/product/838794/',
@@ -1042,7 +1116,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.30.0');
+  assert.equal(packageJson.version, '4.31.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));

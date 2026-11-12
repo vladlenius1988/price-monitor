@@ -8,7 +8,10 @@ const packagedExecutable = String(process.env.PRICE_MONITOR_SMOKE_EXECUTABLE || 
 const electron = packagedExecutable || path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe');
 const port = 9337;
 const testData = fs.mkdtempSync(path.join(os.tmpdir(), 'price-monitor-makeup-smoke-'));
-const queries = process.argv.slice(2).length ? process.argv.slice(2) : ['lipss', 'pop gossip'];
+const detailed = process.argv.includes('--detailed');
+const collectBarcodes = process.argv.includes('--barcodes');
+const queries = process.argv.slice(2).filter((value) => !value.startsWith('--'));
+if (!queries.length) queries.push('lipss', 'pop gossip');
 let stdout = '';
 let stderr = '';
 
@@ -104,6 +107,8 @@ async function runQuery(client, query, timeoutMs = 180000) {
     const input = document.querySelector('#brand-query');
     input.value = ${JSON.stringify(query)};
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('#include-variants').checked = ${JSON.stringify(detailed)};
+    document.querySelector('#include-barcodes').checked = ${JSON.stringify(collectBarcodes)};
     document.querySelector('#parse-products').click();
     return true;
   })()`);
@@ -119,6 +124,15 @@ async function runQuery(client, query, timeoutMs = 180000) {
         status: status?.textContent || '',
         statusType: status?.dataset?.type || '',
         rows: document.querySelectorAll('#product-table tbody tr').length,
+        barcodeRows: [...document.querySelectorAll('#product-table tbody tr')]
+          .filter((row) => /^\\d{8,14}$/.test(row.children[2]?.textContent?.trim() || '')).length,
+        missingBarcodeRows: [...document.querySelectorAll('#product-table tbody tr')]
+          .filter((row) => !/^\\d{8,14}$/.test(row.children[2]?.textContent?.trim() || '')).length,
+        barcodeValues: [...document.querySelectorAll('#product-table tbody tr')]
+          .map((row) => (row.children[2]?.textContent || '').trim()),
+        rowsWithoutBarcode: [...document.querySelectorAll('#product-table tbody tr')]
+          .filter((row) => !/^\\d{8,14}$/.test(row.children[2]?.textContent?.trim() || ''))
+          .map((row) => [...row.children].slice(0, 4).map((cell) => cell.textContent.trim())),
         meta: document.querySelector('#result-meta')?.textContent || ''
       };
     })()`);
@@ -141,6 +155,9 @@ async function main() {
       const result = await runQuery(client, query);
       results.push({ query, ...result });
       if (!result.rows) throw new Error(`makeup_smoke_no_rows:${query}:${result.status}`);
+      if (collectBarcodes && !result.barcodeRows) {
+        throw new Error(`makeup_smoke_no_barcodes:${query}:${result.status}`);
+      }
     }
     process.stdout.write(`${JSON.stringify({ ok: true, results }, null, 2)}\n`);
   } catch (error) {

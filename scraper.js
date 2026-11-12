@@ -41,6 +41,7 @@ const MAX_PAGES = 100;
 const MAX_LOAD_ATTEMPTS = 2;
 const ROZETKA_DETAIL_CONCURRENCY = 2;
 const MAKEUP_DETAIL_CONCURRENCY = 2;
+const NOTINO_CHALLENGE_WAIT_MS = 75_000;
 
 class PriceScraper {
   constructor({ BrowserWindow, cacheFile, recoveryFile = null }) {
@@ -122,6 +123,24 @@ class PriceScraper {
         });
       this.setRecoveryBrand(match.name);
       this.assertNotCancelled();
+
+      if (match.notFound) {
+        progress({
+          phase: 'done',
+          message: `Торгову марку «${match.name}» у каталозі ${STORES[store].label} не знайдено`,
+          current: 0,
+          total: 0,
+          brand: match.name,
+        });
+        this.markRecovery('completed');
+        return {
+          store,
+          brand: match.name,
+          matchedBy: 'directory',
+          products: [],
+          notFound: true,
+        };
+      }
 
       progress({
         phase: barcodeQuery ? 'barcode' : 'brand',
@@ -361,6 +380,19 @@ class PriceScraper {
     const best = rankBrands(brands, query)[0];
     const threshold = normalizeText(query).length <= 3 ? 0.72 : 0.55;
     if (best && best.score >= threshold) return { ...best.item, searchMode: false };
+
+    // Notino's brand directory is occasionally hidden behind an access check.
+    // Fall back to its regular search, but mark the result for strict brand
+    // verification so a query such as "Stars from the Stars" cannot return
+    // hundreds of unrelated products merely because some words coincide.
+    if (store === 'notino') {
+      return {
+        name: query.trim(),
+        url: STORES[store].fallbackSearchUrl + encodeURIComponent(query.trim()),
+        searchMode: true,
+        verifyBrand: true,
+      };
+    }
 
     return {
       name: query.trim(),
@@ -671,6 +703,11 @@ class PriceScraper {
             }
             variantData.barcodeVariantId = barcodeVariantId;
             if (barcodeVariantId) variantData.barcode = requestedBarcode;
+          } else if (includeBarcodes && variantData.id && variantData.hasVariants && variantData.variants?.length) {
+            variantData.variantBarcodes = await detailWindow.webContents.executeJavaScript(
+              `(${fetchMakeupVariantBarcodes.toString()})(${JSON.stringify(variantData.id)}, ${JSON.stringify(variantData.variants)})`,
+              true,
+            ).catch(() => ({}));
           }
           results.push(...expandMakeupVariantData(product, variantData, {
             includeVariants,
@@ -709,7 +746,7 @@ class PriceScraper {
 
   async parseNotino(browser, match, progress, options = {}) {
     await this.navigate(browser, match.url);
-    await this.waitForProducts(browser, 'notino');
+    await this.waitForNotinoCatalog(browser, match, progress);
 
     await browser.webContents.executeJavaScript(`(() => {
       const button = document.querySelector('[data-testid="footer-action-button"]');
@@ -754,10 +791,62 @@ class PriceScraper {
     const result = await browser.webContents.executeJavaScript(
       `(${extractPage.toString()})('notino', ${JSON.stringify(match.name)})`, true,
     );
+    if (match.verifyBrand) {
+      result.products = result.products.filter((product) => brandNamesMatch(product.brand, match.name));
+    }
     if (!options.includeVariants) {
       return result.products.map(({ variant: _variant, needsVariantDetail: _needsVariantDetail, ...product }) => product);
     }
     return this.expandNotinoVariants(browser, result.products, match, progress);
+  }
+
+  async waitForNotinoCatalog(browser, match, progress) {
+    const selector = '[data-testid="product-container"] [data-testid="product-card-name"]';
+    const initiallyReady = await waitFor(async () => {
+      this.assertNotCancelled();
+      return browser.webContents.executeJavaScript(
+        `document.querySelectorAll(${JSON.stringify(selector)}).length || null`, true,
+      );
+    }, 8_000, false);
+    if (initiallyReady) {
+      await this.waitForProducts(browser, 'notino');
+      return;
+    }
+
+    const accessState = await browser.webContents.executeJavaScript(`(() => {
+      const title = String(document.title || '');
+      const text = String(document.body?.innerText || '').slice(0, 2000);
+      return {
+        title,
+        challenge: /just a moment|один момент|checking your browser|перевіряємо ваш браузер/i.test(title + ' ' + text),
+      };
+    })()`, true).catch(() => ({ title: '', challenge: false }));
+
+    if (!accessState.challenge) {
+      await this.waitForProducts(browser, 'notino');
+      return;
+    }
+
+    progress({
+      phase: 'access',
+      message: `Notino перевіряє доступ до сторінки «${match.name}». Завершіть перевірку у відкритому вікні…`,
+      brand: match.name,
+    });
+    browser.show();
+
+    const approved = await waitFor(async () => {
+      this.assertNotCancelled();
+      if (browser.isDestroyed()) return null;
+      return browser.webContents.executeJavaScript(
+        `document.querySelectorAll(${JSON.stringify(selector)}).length || null`, true,
+      );
+    }, NOTINO_CHALLENGE_WAIT_MS, false);
+
+    if (!browser.isDestroyed()) browser.hide();
+    if (!approved) {
+      throw new Error('Notino не підтвердив доступ. Повторіть пошук і завершіть перевірку у відкритому вікні.');
+    }
+    await this.waitForProducts(browser, 'notino');
   }
 
   async expandNotinoVariants(browser, products, match, progress) {
@@ -1673,7 +1762,8 @@ function expandMakeupVariantData(parentProduct, detail, options = {}) {
       ...prices,
       available: true,
       ...(includeBarcodes ? {
-        barcode: String(variant.id) === String(detail?.defaultVariantId || '') ? barcode : '',
+        barcode: normalizeBarcode(detail?.variantBarcodes?.[String(variant.id)])
+          || (String(variant.id) === String(detail?.defaultVariantId || '') ? barcode : ''),
       } : {}),
       url: `${String(base.url || '').replace(/#.*$/, '')}#/option/${encodeURIComponent(variant.id)}/`,
       image: variant.image || base.image,
@@ -1712,6 +1802,48 @@ async function findMakeupBarcodeVariant(productId, variants, expectedBarcode, re
     if (match) return match;
   }
   return '';
+}
+
+async function fetchMakeupVariantBarcodes(productId, variants, request = fetch) {
+  const cleanBarcode = (value) => String(value ?? '').replace(/[\s-]+/g, '');
+  const isValidBarcode = (value) => {
+    const barcode = cleanBarcode(value);
+    if (!/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(barcode)) return false;
+    const data = barcode.slice(0, -1);
+    let sum = 0;
+    for (let index = data.length - 1, position = 0; index >= 0; index -= 1, position += 1) {
+      sum += Number(data[index]) * (position % 2 === 0 ? 3 : 1);
+    }
+    return (10 - (sum % 10)) % 10 === Number(barcode.at(-1));
+  };
+  if (!productId) return {};
+
+  const candidates = (variants || [])
+    .filter((variant) => variant?.id && variant?.inStock === true);
+  const result = {};
+  for (let offset = 0; offset < candidates.length; offset += 4) {
+    const batch = candidates.slice(offset, offset + 4);
+    const rows = await Promise.all(batch.map(async (variant) => {
+      try {
+        const url = new URL(`/shop/v1/products/${encodeURIComponent(productId)}/`, location.origin);
+        url.searchParams.set('variant', String(variant.id));
+        const response = await request(url.href, {
+          credentials: 'same-origin',
+          headers: { accept: 'application/json' },
+        });
+        if (!response?.ok) return null;
+        const product = await response.json();
+        const barcode = cleanBarcode(product?.meta?.gtin13);
+        return isValidBarcode(barcode) ? [String(variant.id), barcode] : null;
+      } catch (_error) {
+        return null;
+      }
+    }));
+    for (const row of rows) {
+      if (row) result[row[0]] = row[1];
+    }
+  }
+  return result;
 }
 
 function extractEvaVariants(parentProduct) {
@@ -1983,10 +2115,15 @@ function uniqueBrands(brands) {
 }
 
 function rankBrands(brands, query) {
-  const normalizedQuery = normalizeText(query);
-  if (!normalizedQuery) return [];
+  const queryKeys = brandSearchKeys(query);
+  if (!queryKeys.length) return [];
   return (brands || [])
-    .map((item) => ({ item, score: similarity(normalizedQuery, normalizeText(item.name)) }))
+    .map((item) => {
+      const candidateKeys = brandSearchKeys(item.name);
+      const score = Math.max(0, ...queryKeys.flatMap((queryKey) =>
+        candidateKeys.map((candidateKey) => similarity(queryKey, candidateKey))));
+      return { item, score };
+    })
     .filter((entry) => entry.score > 0.2)
     .sort((a, b) => b.score - a.score || a.item.name.length - b.item.name.length);
 }
@@ -2022,9 +2159,49 @@ function levenshtein(a, b) {
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFKD')
+    .replace(/[łŁ]/g, 'l')
+    .replace(/[øØ]/g, 'o')
+    .replace(/[đĐðÐ]/g, 'd')
+    .replace(/[þÞ]/g, 'th')
+    .replace(/[æÆ]/g, 'ae')
+    .replace(/[œŒ]/g, 'oe')
+    .replace(/ß/g, 'ss')
+    .replace(/[ıİ]/g, 'i')
     .replace(/[’`´]/g, "'")
     .replace(/[^\p{L}\p{N}]+/gu, '')
     .toLocaleLowerCase('uk');
+}
+
+function brandSearchKeys(value) {
+  const original = normalizeText(value);
+  const transliterated = normalizeText(transliterateCyrillic(value));
+  return [...new Set([original, transliterated].filter(Boolean))];
+}
+
+function transliterateCyrillic(value) {
+  const pairs = {
+    а: 'a', б: 'b', в: 'v', г: 'g', ґ: 'g', д: 'd', е: 'e', ё: 'e', є: 'e', ж: 'zh',
+    з: 'z', и: 'i', і: 'i', ї: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
+    п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh',
+    щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  return [...String(value || '').toLocaleLowerCase('uk')]
+    .map((character) => Object.prototype.hasOwnProperty.call(pairs, character) ? pairs[character] : character)
+    .join('');
+}
+
+function brandNamesMatch(candidate, query) {
+  const candidateKeys = brandSearchKeys(candidate);
+  const queryKeys = brandSearchKeys(query);
+  return candidateKeys.some((candidateKey) => queryKeys.some((queryKey) => {
+    if (candidateKey === queryKey) return true;
+    const shorter = Math.min(candidateKey.length, queryKey.length);
+    const longer = Math.max(candidateKey.length, queryKey.length);
+    if (shorter >= 5 && longer > 0
+      && (candidateKey.includes(queryKey) || queryKey.includes(candidateKey))
+      && shorter / longer >= 0.6) return true;
+    return similarity(candidateKey, queryKey) >= 0.82;
+  }));
 }
 
 function normalizeBarcode(value) {
@@ -2169,6 +2346,8 @@ module.exports = {
   expandAuroraProducts,
   expandMakeupVariantData,
   findMakeupBarcodeVariant,
+  fetchMakeupVariantBarcodes,
+  brandNamesMatch,
   deduplicateProducts,
   isRetryableLoadError,
 };
