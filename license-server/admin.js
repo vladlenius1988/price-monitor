@@ -47,6 +47,13 @@ const testTelegramButton = document.getElementById('test-telegram');
 const supportInbox = document.getElementById('support-inbox');
 const supportStatusFilter = document.getElementById('support-status-filter');
 const supportTextFilter = document.getElementById('support-text-filter');
+const storeHealthSection = document.getElementById('store-health-section');
+const storeHealthRun = document.getElementById('store-health-run');
+const storeHealthEnabled = document.getElementById('store-health-enabled');
+const storeHealthSummary = document.getElementById('store-health-summary');
+const storeHealthProgress = document.getElementById('store-health-progress');
+const storeHealthSchedule = document.getElementById('store-health-schedule');
+const storeHealthResults = document.getElementById('store-health-results');
 let supportItems = [];
 let ownerMode = 'browser';
 
@@ -65,8 +72,11 @@ testTelegramButton.addEventListener('click', () => testTelegram().catch(showErro
 supportInbox.addEventListener('click', (event) => handleSupportAction(event).catch(showError));
 supportStatusFilter.addEventListener('change', renderSupportInbox);
 supportTextFilter.addEventListener('input', renderSupportInbox);
+storeHealthRun.addEventListener('click', () => runStoreHealthCheck().catch(showError));
+storeHealthEnabled.addEventListener('change', () => setStoreHealthEnabled().catch(showError));
 initializeOwner().catch(showError);
 window.priceMonitorOwner?.onReleaseProgress?.(renderReleaseProgress);
+window.priceMonitorOwner?.onStoreHealthUpdate?.(renderStoreHealth);
 setInterval(() => {
   const isEditing = document.activeElement?.matches('input,select,textarea');
   const hasOpenClient = Boolean(licenses.querySelector('.client-actions[open]'));
@@ -86,7 +96,77 @@ async function initializeOwner() {
     document.getElementById('owner-description').textContent = 'Ліцензії та пристрої зберігаються у Cloudflare. Адміністративний токен залишається на цьому комп’ютері.';
     document.getElementById('telegram-section').hidden = true;
   }
+  await loadStoreHealth();
   await refresh();
+}
+
+async function loadStoreHealth() {
+  if (!window.priceMonitorOwner?.storeHealthStatus) {
+    storeHealthSection.hidden = true;
+    return;
+  }
+  renderStoreHealth(await window.priceMonitorOwner.storeHealthStatus());
+}
+
+async function runStoreHealthCheck() {
+  storeHealthRun.disabled = true;
+  storeHealthProgress.textContent = 'Запускаю коротку перевірку…';
+  try {
+    renderStoreHealth(await window.priceMonitorOwner.runStoreHealth());
+  } finally {
+    storeHealthRun.disabled = false;
+  }
+}
+
+async function setStoreHealthEnabled() {
+  renderStoreHealth(await window.priceMonitorOwner.setStoreHealthEnabled(storeHealthEnabled.checked));
+}
+
+function renderStoreHealth(snapshot) {
+  if (!snapshot) return;
+  const results = Array.isArray(snapshot.results) ? snapshot.results : [];
+  const okCount = results.filter((item) => item.status === 'ok').length;
+  storeHealthEnabled.checked = snapshot.enabled !== false;
+  storeHealthRun.disabled = Boolean(snapshot.running);
+  storeHealthSummary.textContent = snapshot.running
+    ? 'Перевірка триває'
+    : results.length ? `${okCount} із ${STORE_IDS.length} працюють` : 'Ще не перевірено';
+  storeHealthSummary.classList.toggle('is-blocked', !snapshot.running && results.length > 0 && okCount < STORE_IDS.length);
+  storeHealthProgress.textContent = snapshot.running
+    ? snapshot.currentStore
+      ? `${STORE_LABELS[snapshot.currentStore] || snapshot.currentStore}: спроба ${snapshot.attempt || 1} — ${snapshot.currentQuery || ''}`
+      : 'Перевірка запускається…'
+    : snapshot.lastFinishedAt ? `Завершено ${formatDateTime(snapshot.lastFinishedAt)}` : '';
+  storeHealthSchedule.textContent = !snapshot.enabled
+    ? 'Автоматичну перевірку вимкнено. Ручна кнопка працює.'
+    : snapshot.nextRunAt
+      ? `Наступна автоматична перевірка: ${formatDateTime(snapshot.nextRunAt)}. Якщо Owner був закритий — одразу після наступного запуску.`
+      : 'Наступна перевірка: автоматично після запуску Owner.';
+
+  storeHealthResults.innerHTML = results.length ? results.map((item) => {
+    const attempts = Array.isArray(item.attempts) ? item.attempts : [];
+    return `<article class="health-card is-${item.status === 'ok' ? 'ok' : 'error'}">
+      <strong>${escapeHtml(item.storeLabel || STORE_LABELS[item.store] || item.store)}</strong>
+      <span>${item.status === 'ok'
+        ? `Працює · «${escapeHtml(item.successfulQuery)}» · ${Math.max(1, Number(item.productCount) || 1)} карток`
+        : 'Не пройдено всі три контрольні запити'}</span>
+      <div class="muted">${escapeHtml(formatDuration(item.durationMs))} · ${escapeHtml(formatDateTime(item.checkedAt))}</div>
+      <ol class="health-attempts">${attempts.map((attempt) => `<li>${escapeHtml(attempt.query)} — ${attempt.ok ? `успіх (${attempt.productCount})` : healthErrorLabel(attempt.errorCode)}</li>`).join('')}</ol>
+    </article>`;
+  }).join('') : '<p class="muted">Результатів ще немає. Натисніть «Перевірити зараз» або залиште Owner відкритим.</p>';
+}
+
+function formatDuration(value) {
+  const seconds = Math.max(0, Math.round(Number(value || 0) / 1000));
+  if (seconds < 60) return `${seconds} с`;
+  return `${Math.floor(seconds / 60)} хв ${seconds % 60} с`;
+}
+
+function healthErrorLabel(code) {
+  return ({
+    no_products: 'товарів немає', timeout: 'перевищено час очікування', access_check: 'перевірка доступу',
+    catalog_unavailable: 'каталог недоступний', network_error: 'помилка мережі', cancelled: 'скасовано',
+  })[code] || 'технічна помилка';
 }
 
 function initializeToken() {

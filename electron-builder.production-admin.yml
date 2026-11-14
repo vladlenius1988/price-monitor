@@ -9,6 +9,8 @@ files:
   - license-server/owner-api.js
   - license-server/cloud-release-uploader.js
   - license-server/cloud-releases.js
+  - license-server/store-health-monitor.js
+  - scraper.js
   - license-server/admin-preload.js
   - license-server/admin.html
   - license-server/admin.js

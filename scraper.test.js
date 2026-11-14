@@ -1116,7 +1116,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.31.0');
+  assert.equal(packageJson.version, '4.32.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1781,6 +1781,22 @@ test('does not collapse an open client management panel during automatic refresh
   const admin = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
   assert.match(admin, /licenses\.querySelector\('\.client-actions\[open\]'\)/);
   assert.match(admin, /if \(!isEditing && !hasOpenClient\) refresh\(\{ quiet: true \}\)/);
+});
+
+test('packages daily three-probe store health monitoring inside production Owner', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.html'), 'utf8');
+  const admin = fs.readFileSync(path.join(__dirname, 'license-server', 'admin.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'license-server', 'admin-preload.js'), 'utf8');
+  const ownerMain = fs.readFileSync(path.join(__dirname, 'license-server', 'cloud-admin-main.js'), 'utf8');
+  const config = fs.readFileSync(path.join(__dirname, 'electron-builder.production-admin.yml'), 'utf8');
+  assert.match(html, /id="store-health-section"/);
+  assert.match(html, /основний запит і два запасні/);
+  assert.match(admin, /function renderStoreHealth/);
+  assert.match(preload, /runStoreHealth/);
+  assert.match(ownerMain, /new StoreHealthMonitor/);
+  assert.match(ownerMain, /healthCheck: true/);
+  assert.match(config, /- license-server\/store-health-monitor\.js/);
+  assert.match(config, /- scraper\.js/);
 });
 
 test('reports privacy-safe search telemetry and shows aggregates in the owner dashboard', () => {

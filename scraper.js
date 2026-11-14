@@ -120,6 +120,7 @@ class PriceScraper {
         : await this.resolveBrand(store, query, {
           forceSearch: Boolean(options.productSearch),
           resultName: String(options.productSearchBrand || '').trim(),
+          healthCheck: Boolean(options.healthCheck),
         });
       this.setRecoveryBrand(match.name);
       this.assertNotCancelled();
@@ -370,6 +371,15 @@ class PriceScraper {
       };
     }
 
+    if (store === 'notino' && options.healthCheck) {
+      return {
+        name: query.trim(),
+        url: STORES[store].fallbackSearchUrl + encodeURIComponent(query.trim()),
+        searchMode: true,
+        verifyBrand: true,
+      };
+    }
+
     let brands = [];
     try {
       brands = await this.ensureBrands(store);
@@ -472,7 +482,7 @@ class PriceScraper {
         if (store === 'rozetka') {
           return await this.parseRozetka(this.activeWindow, match, progress, options);
         }
-        return await this.parsePagedStore(this.activeWindow, store, match, progress);
+        return await this.parsePagedStore(this.activeWindow, store, match, progress, options);
       } catch (error) {
         lastError = error;
         if (error?.code === 'CANCELLED' || attempt >= MAX_LOAD_ATTEMPTS || !isRetryableLoadError(error)) {
@@ -493,7 +503,7 @@ class PriceScraper {
     throw lastError;
   }
 
-  async parsePagedStore(browser, store, match, progress) {
+  async parsePagedStore(browser, store, match, progress, options = {}) {
     const products = [];
     let page = 1;
     let totalPages = 1;
@@ -523,14 +533,15 @@ class PriceScraper {
         phase: 'collecting', message: `Зібрано товарів: ${uniqueCount}`,
         page, totalPages, current: uniqueCount, brand: match.name,
       });
+      if (options.healthCheck) break;
       page += 1;
     } while (page <= totalPages);
 
-    return products;
+    return options.healthCheck ? deduplicateProducts(products).slice(0, 5) : products;
   }
 
   async parseEva(browser, match, progress, options = {}) {
-    const products = await this.parsePagedStore(browser, 'eva', match, progress);
+    const products = await this.parsePagedStore(browser, 'eva', match, progress, options);
     if (!options.includeVariants) {
       return products.map(({ variant: _variant, needsVariantDetail: _needsVariantDetail, ...product }) => product);
     }
@@ -538,7 +549,7 @@ class PriceScraper {
   }
 
   async parseAurora(browser, match, progress, options = {}) {
-    const products = await this.parsePagedStore(browser, 'aurora', match, progress);
+    const products = await this.parsePagedStore(browser, 'aurora', match, progress, options);
     if (!options.includeVariants) {
       return products.map(({ variantOptions: _variantOptions, needsVariantDetail: _needsVariantDetail, ...product }) => product);
     }
@@ -609,6 +620,8 @@ class PriceScraper {
         current: state.available, total: state.total, brand: match.name,
       });
 
+      if (options.healthCheck) break;
+
       if (!state.hasMore || (state.total && state.available >= state.total)) break;
       await browser.webContents.executeJavaScript(
         `document.querySelector('.Products__pagination > button, button.Products__pagination')?.click()`, true,
@@ -630,6 +643,7 @@ class PriceScraper {
     const result = await browser.webContents.executeJavaScript(
       `(${extractPage.toString()})('makeup', ${JSON.stringify(match.name)})`, true,
     );
+    if (options.healthCheck) result.products = result.products.slice(0, 5);
     if (!options.includeVariants && !options.includeBarcodes) {
       return result.products.map(({ needsVariantDetail: _needsVariantDetail, ...product }) => product);
     }
@@ -746,7 +760,7 @@ class PriceScraper {
 
   async parseNotino(browser, match, progress, options = {}) {
     await this.navigate(browser, match.url);
-    await this.waitForNotinoCatalog(browser, match, progress);
+    await this.waitForNotinoCatalog(browser, match, progress, options);
 
     await browser.webContents.executeJavaScript(`(() => {
       const button = document.querySelector('[data-testid="footer-action-button"]');
@@ -768,6 +782,8 @@ class PriceScraper {
         current: state.count,
         brand: match.name,
       });
+
+      if (options.healthCheck) break;
 
       if (!state.hasMore) break;
       await browser.webContents.executeJavaScript(`(() => {
@@ -794,13 +810,14 @@ class PriceScraper {
     if (match.verifyBrand) {
       result.products = result.products.filter((product) => brandNamesMatch(product.brand, match.name));
     }
+    if (options.healthCheck) result.products = result.products.slice(0, 5);
     if (!options.includeVariants) {
       return result.products.map(({ variant: _variant, needsVariantDetail: _needsVariantDetail, ...product }) => product);
     }
     return this.expandNotinoVariants(browser, result.products, match, progress);
   }
 
-  async waitForNotinoCatalog(browser, match, progress) {
+  async waitForNotinoCatalog(browser, match, progress, options = {}) {
     const selector = '[data-testid="product-container"] [data-testid="product-card-name"]';
     const initiallyReady = await waitFor(async () => {
       this.assertNotCancelled();
@@ -825,6 +842,12 @@ class PriceScraper {
     if (!accessState.challenge) {
       await this.waitForProducts(browser, 'notino');
       return;
+    }
+
+    if (options.healthCheck) {
+      const error = new Error('Notino показав перевірку доступу під час фонового контролю.');
+      error.code = 'ACCESS_CHECK';
+      throw error;
     }
 
     progress({
@@ -926,7 +949,7 @@ class PriceScraper {
       Object.assign(match, resolved, { searchMode: false });
     }
 
-    const products = await this.parsePagedStore(browser, 'rozetka', match, progress);
+    const products = await this.parsePagedStore(browser, 'rozetka', match, progress, options);
     if (!options.includeSellers) {
       return products.map(({ variantUrls: _variantUrls, needsSellerDetail: _needsSellerDetail, ...product }) => product);
     }

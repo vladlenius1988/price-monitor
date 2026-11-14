@@ -5,6 +5,8 @@ const path = require('path');
 const packageInfo = require('../package.json');
 const { createOwnerApiClient } = require('./owner-api');
 const { uploadCloudRelease } = require('./cloud-release-uploader');
+const { PriceScraper } = require('../scraper');
+const { StoreHealthMonitor } = require('./store-health-monitor');
 
 const APP_NAME = String(packageInfo.priceMonitorAdminAppName || 'Price Monitor Cloud Admin');
 const USER_DATA_NAME = String(packageInfo.priceMonitorAdminUserDataName || APP_NAME);
@@ -18,6 +20,9 @@ let mainWindow = null;
 let ownerApiClient = null;
 let adminToken = '';
 let selectedInstallerPath = '';
+let storeHealthMonitor = null;
+let storeHealthScraper = null;
+let storeHealthTimer = null;
 
 const appDataRoot = app.getPath('appData');
 app.setName(APP_NAME);
@@ -109,6 +114,30 @@ ipcMain.handle('owner:publish-release', async (_event, input = {}) => {
     },
   });
 });
+ipcMain.handle('owner:store-health-status', () => storeHealthMonitor?.snapshot() || null);
+ipcMain.handle('owner:store-health-run', () => storeHealthMonitor?.run() || null);
+ipcMain.handle('owner:store-health-enabled', (_event, enabled) => storeHealthMonitor?.setEnabled(enabled) || null);
+
+function createStoreHealthMonitor() {
+  const userData = app.getPath('userData');
+  storeHealthScraper = new PriceScraper({
+    BrowserWindow,
+    cacheFile: path.join(userData, 'store-health-brands-cache.json'),
+  });
+  storeHealthMonitor = new StoreHealthMonitor({
+    stateFile: path.join(userData, 'store-health.json'),
+    checkStore: async ({ store, query }) => {
+      const result = await storeHealthScraper.parseBrand(store, query, () => {}, { healthCheck: true });
+      return { productCount: result.products.length };
+    },
+    onUpdate: (snapshot) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('owner:store-health-update', snapshot);
+    },
+  });
+  setTimeout(() => storeHealthMonitor?.runIfDue().catch(() => {}), 5_000).unref?.();
+  storeHealthTimer = setInterval(() => storeHealthMonitor?.runIfDue().catch(() => {}), 60 * 60 * 1000);
+  storeHealthTimer.unref?.();
+}
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -126,6 +155,7 @@ if (!hasSingleInstanceLock) {
       adminToken = ensureAdminToken();
       ownerApiClient = createOwnerApiClient({ apiBaseUrl: API_BASE_URL, adminToken });
       await createWindow();
+      createStoreHealthMonitor();
     } catch (error) {
       await dialog.showMessageBox({
         type: 'error',
@@ -139,3 +169,7 @@ if (!hasSingleInstanceLock) {
 }
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => {
+  if (storeHealthTimer) clearInterval(storeHealthTimer);
+  storeHealthScraper?.cancel?.();
+});

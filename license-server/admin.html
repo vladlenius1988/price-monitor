@@ -86,7 +86,15 @@
     .release-progress progress { width: 100%; height: 16px; }
     .environment-production { color: #21613e; }
     .environment-staging { color: #8a5a16; }
-    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .telemetry-grid { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
+    .health-grid { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+    .health-card { border: 1px solid #dde3ec; border-left: 5px solid #7890aa; border-radius: 12px; padding: 13px; background: #fff; }
+    .health-card.is-ok { border-left-color: #2b8b57; background: #f5fbf7; }
+    .health-card.is-error { border-left-color: #c03a31; background: #fff8f7; }
+    .health-card strong { display: block; margin-bottom: 5px; }
+    .health-attempts { margin: 8px 0 0; padding-left: 18px; color: #60708b; font-size: 12px; }
+    .health-toggle { display: flex; align-items: center; gap: 7px; }
+    .health-toggle input { min-width: 0; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } .telemetry-grid, .health-grid { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } .client-summary, .client-settings { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -110,6 +118,20 @@
         <article><strong id="service-recovery">—</strong><span class="muted">хмарне відновлення</span></article>
       </div>
       <p class="muted" id="service-request">Ідентифікатор останньої перевірки: —</p>
+    </section>
+
+    <section id="store-health-section">
+      <div class="section-heading">
+        <div><h2>Контроль магазинів</h2><p>Owner раз на добу робить коротку перевірку. Для кожного магазину є основний запит і два запасні; перевірка завершується після першої доступної картки.</p></div>
+        <span id="store-health-summary" class="status-pill">Ще не перевірено</span>
+      </div>
+      <div class="toolbar">
+        <button id="store-health-run" class="primary" type="button">Перевірити зараз</button>
+        <label class="health-toggle"><input id="store-health-enabled" type="checkbox" checked> Автоматично раз на добу, поки Owner запущений</label>
+        <span id="store-health-progress" class="muted"></span>
+      </div>
+      <p id="store-health-schedule" class="muted">Наступна перевірка: після запуску Owner.</p>
+      <div id="store-health-results" class="health-grid"><p class="muted">Результатів ще немає.</p></div>
     </section>
 
     <section>
