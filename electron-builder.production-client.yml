@@ -26,6 +26,8 @@ files:
   - demo-access.js
   - license-access.js
   - diagnostic-report.js
+  - pilot-statistics.js
+  - pilot-statistics-export.js
   - device-identity.js
   - license-public-production.pem
   - renderer.js

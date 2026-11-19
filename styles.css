@@ -358,6 +358,42 @@ h2 { margin-bottom: 4px; font-size: 20px; }
 .capabilities-footer { display: flex; justify-content: flex-end; padding: 18px 24px 22px; }
 .capabilities-footer .primary-button { height: 42px; }
 
+.pilot-summary-dialog { width: min(1180px, calc(100vw - 48px)); }
+.pilot-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; margin: 0 24px 12px; }
+.pilot-toolbar label { display: grid; gap: 5px; min-width: 180px; color: #667085; font-size: 12px; font-weight: 750; }
+.pilot-toolbar select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #cfd7e3; border-radius: 9px; background: #fff; color: #253246; font: inherit; }
+.pilot-privacy { margin: 0 24px 16px; padding: 11px 13px; border: 1px solid #a7d5bc; border-radius: 10px; background: #eff9f3; color: #276747; font-size: 12px; line-height: 1.5; }
+.pilot-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; margin: 0 24px 16px; }
+.pilot-metrics article { min-width: 0; padding: 13px 12px; border: 1px solid #e1e6ee; border-radius: 11px; background: #fafbfc; }
+.pilot-metrics small, .pilot-metrics strong { display: block; }
+.pilot-metrics small { min-height: 30px; color: #7b8492; font-size: 11px; line-height: 1.35; }
+.pilot-metrics strong { margin-top: 5px; overflow: hidden; color: #112a46; font-size: 21px; text-overflow: ellipsis; }
+.pilot-metrics article:first-child strong, .pilot-metrics article:nth-child(3) strong, .pilot-metrics article:nth-child(6) strong { color: #ef5b22; }
+.pilot-section { margin: 0 24px 16px; }
+.pilot-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+.pilot-section-heading h3 { margin: 0; color: #253246; font-size: 16px; }
+.pilot-section-heading small { color: #8a94a3; font-size: 11px; }
+.pilot-section .table-wrap { max-height: 260px; overflow: auto; border: 1px solid #e2e7ef; border-radius: 10px; }
+.pilot-table { min-width: 760px; font-size: 12px; }
+.pilot-table th:nth-child(n) { width: auto; text-transform: none; letter-spacing: 0; }
+.pilot-table td { padding: 9px 10px; vertical-align: top; }
+.pilot-table td small { display: block; margin-top: 3px; color: #8a94a3; }
+.pilot-empty { margin: 0 24px 16px; padding: 34px 18px; border: 1px dashed #d8dee8; border-radius: 10px; color: #7b8492; text-align: center; }
+.pilot-status { min-height: 18px; margin: 0 24px 20px; color: #667085; font-size: 12px; }
+.pilot-status[data-type="success"] { color: #157347; }
+.pilot-status[data-type="error"] { color: #b42318; }
+.pilot-status[data-type="loading"] { color: #c44f1b; }
+
+@media (max-width: 1000px) {
+  .pilot-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .pilot-toolbar { align-items: stretch; flex-direction: column; }
+  .pilot-toolbar label { width: 100%; }
+  .pilot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pilot-section-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+}
+
 .barcode-monitor-dialog { width: min(1180px, calc(100vw - 48px)); }
 .barcode-monitor-search { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(150px, auto) auto auto; align-items: end; gap: 10px; margin: 0 24px 12px; }
 .barcode-monitor-search label { display: grid; gap: 6px; color: #344054; font-size: 12px; font-weight: 800; }

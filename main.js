@@ -19,6 +19,8 @@ const { buildMultiStoreLiveWorkbook } = require('./multi-store-live-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
+const { PilotStatisticsStore } = require('./pilot-statistics');
+const { buildPilotStatisticsWorkbook } = require('./pilot-statistics-export');
 
 const requestedEdition = String(process.env.PRICE_MONITOR_EDITION || packageInfo.priceMonitorEdition || 'full');
 const APP_EDITION = ['demo', 'licensed'].includes(requestedEdition) ? requestedEdition : 'full';
@@ -70,6 +72,7 @@ let licenseCheckTimer = null;
 let latestUpdateDocument = null;
 let lastAutomaticUpdateCheckAt = 0;
 let diagnosticStore = null;
+let pilotStatisticsStore = null;
 
 function debugRenderer(message) {
   const argument = process.argv.find((value) => value.startsWith('--debug-log='));
@@ -244,6 +247,36 @@ function registerIpcHandlers() {
       return { accepted: false, reason: 'not_configured' };
     }
     return accessStore.reportSearchTelemetry(payload);
+  });
+
+  ipcMain.handle('pilot:record-search', async (_event, payload = {}) => {
+    if (!pilotStatisticsStore) return { recorded: false };
+    const event = await pilotStatisticsStore.recordSearch(payload);
+    return { recorded: Boolean(event), event };
+  });
+  ipcMain.handle('pilot:record-export', async (_event, payload = {}) => {
+    if (!pilotStatisticsStore) return { recorded: false };
+    const event = await pilotStatisticsStore.recordExport(payload);
+    return { recorded: Boolean(event), event };
+  });
+  ipcMain.handle('pilot:summary', async (_event, period = {}) => {
+    if (!pilotStatisticsStore) return null;
+    return pilotStatisticsStore.summary(period);
+  });
+  ipcMain.handle('pilot:export', async (_event, period = {}) => {
+    if (!pilotStatisticsStore) throw new Error('Статистика пілоту ще не готова.');
+    const summary = await pilotStatisticsStore.summary(period);
+    if (!summary?.totals?.searches) throw new Error('Ще немає завершених пошуків для звіту.');
+    const sheets = buildPilotStatisticsWorkbook(summary);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Зберегти підсумок пілоту',
+      defaultPath: `Price-Monitor-підсумок-пілоту-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const buffer = await writeExcelFile(sheets).toBuffer();
+    await fs.promises.writeFile(result.filePath, buffer);
+    return result.filePath;
   });
 
   ipcMain.handle('diagnostics:record', async (_event, payload = {}) => {
@@ -830,6 +863,7 @@ if (!hasSingleInstanceLock) {
     comparisonStore = new ComparisonStore(path.join(app.getPath('userData'), 'price-comparisons.json'));
     archiveStore = new ArchiveStore(path.join(app.getPath('userData'), 'monitoring-archive.json'));
     diagnosticStore = new DiagnosticEventStore(path.join(app.getPath('userData'), 'diagnostic-events.json'));
+    pilotStatisticsStore = new PilotStatisticsStore(path.join(app.getPath('userData'), 'pilot-statistics.json'));
     registerIpcHandlers();
     createMainWindow();
     const liveIntervalMs = Number(packageInfo.priceMonitorLiveLicenseIntervalMs) || 0;

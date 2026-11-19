@@ -1116,7 +1116,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.32.0');
+  assert.equal(packageJson.version, '4.33.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1124,6 +1124,8 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
   assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
+  assert.ok(packageJson.build.files.includes('pilot-statistics.js'));
+  assert.ok(packageJson.build.files.includes('pilot-statistics-export.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
@@ -1734,8 +1736,8 @@ test('embeds a searchable offline user guide in the application', () => {
   assert.match(html, /id="guide-nav"/);
   assert.match(html, /id="guide-sections"/);
   assert.match(html, /id="guide-empty"/);
-  assert.equal((html.match(/data-guide-section/g) || []).length, 12);
-  assert.equal((html.match(/data-guide-target=/g) || []).length, 12);
+  assert.equal((html.match(/data-guide-section/g) || []).length, 13);
+  assert.equal((html.match(/data-guide-target=/g) || []).length, 13);
   assert.match(renderer, /function openGuide\(\)/);
   assert.match(renderer, /function filterGuideSections\(\)/);
   assert.match(renderer, /tokens\.every/);
@@ -1745,6 +1747,23 @@ test('embeds a searchable offline user guide in the application', () => {
   assert.match(renderer, /function initializeAppInfo\(\)/);
   assert.match(preload, /getAppInfo: \(\) => ipcRenderer\.invoke\('app:info'\)/);
   assert.match(main, /ipcMain\.handle\('app:info'/);
+});
+
+test('keeps pilot evidence locally and exports a management-ready report', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  assert.match(html, /id="show-pilot-summary"/);
+  assert.match(html, /id="pilot-summary-dialog"/);
+  assert.match(html, /торгові марки у цьому звіті зберігаються тільки на цьому комп’ютері/i);
+  assert.match(renderer, /recordPilotSearch/);
+  assert.match(renderer, /recordPilotExport/);
+  assert.match(renderer, /function renderPilotSummary\(summary\)/);
+  assert.match(preload, /getPilotSummary/);
+  assert.match(preload, /exportPilotSummary/);
+  assert.match(main, /pilot-statistics\.json/);
+  assert.match(main, /ipcMain\.handle\('pilot:export'/);
 });
 
 test('recognizes barcode searches in the MAKEUP interface automatically', () => {

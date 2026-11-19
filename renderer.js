@@ -105,6 +105,25 @@ const missingProductsTitle = document.getElementById('missing-products-title');
 const missingProductsList = document.getElementById('missing-products-list');
 const showCapabilitiesButton = document.getElementById('show-capabilities');
 const capabilitiesDialog = document.getElementById('capabilities-dialog');
+const showPilotSummaryButton = document.getElementById('show-pilot-summary');
+const pilotSummaryDialog = document.getElementById('pilot-summary-dialog');
+const pilotPeriod = document.getElementById('pilot-period');
+const pilotRefreshButton = document.getElementById('pilot-refresh');
+const pilotCopyButton = document.getElementById('pilot-copy');
+const pilotExportButton = document.getElementById('pilot-export');
+const pilotLoading = document.getElementById('pilot-loading');
+const pilotContent = document.getElementById('pilot-content');
+const pilotEmpty = document.getElementById('pilot-empty');
+const pilotStatus = document.getElementById('pilot-status');
+const pilotSearches = document.getElementById('pilot-searches');
+const pilotSuccessRate = document.getElementById('pilot-success-rate');
+const pilotProducts = document.getElementById('pilot-products');
+const pilotDuration = document.getElementById('pilot-duration');
+const pilotBrands = document.getElementById('pilot-brands');
+const pilotExports = document.getElementById('pilot-exports');
+const pilotStoreRows = document.getElementById('pilot-store-rows');
+const pilotBrandRows = document.getElementById('pilot-brand-rows');
+const pilotRecentRows = document.getElementById('pilot-recent-rows');
 const showGuideButton = document.getElementById('show-guide');
 const saveDiagnosticsButton = document.getElementById('save-diagnostics');
 const sendDiagnosticsButton = document.getElementById('send-diagnostics');
@@ -232,6 +251,7 @@ let archiveDeleteUndoToken = '';
 let changeOverview = null;
 let changeReportBusy = false;
 let accessStatus = { isDemo: false, isLicensed: false, allowed: true };
+let currentPilotSummary = null;
 const crossBarcodeState = {
   running: false,
   cancelled: false,
@@ -333,6 +353,11 @@ saveCurrentListButton.addEventListener('click', saveCurrentList);
 exportSavedListsButton.addEventListener('click', exportSavedLists);
 importSavedListsButton.addEventListener('click', importSavedLists);
 clearSearchHistoryButton.addEventListener('click', clearStoreSearchHistory);
+showPilotSummaryButton.addEventListener('click', openPilotSummary);
+pilotPeriod.addEventListener('change', loadPilotSummary);
+pilotRefreshButton.addEventListener('click', loadPilotSummary);
+pilotCopyButton.addEventListener('click', copyPilotSummary);
+pilotExportButton.addEventListener('click', exportPilotSummary);
 showGuideButton.addEventListener('click', openGuide);
 showBarcodeMonitorButton.addEventListener('click', openBarcodeMonitor);
 barcodeMonitorStart.addEventListener('click', startCrossStoreBarcodeSearch);
@@ -796,6 +821,182 @@ function licensedBlockedSummary(reason) {
   if (reason === 'device_id_unavailable') return 'Не вдалося визначити пристрій';
   if (reason === 'license_missing') return 'Файл ліцензії не знайдено';
   return 'Ліцензія пошкоджена або недійсна';
+}
+
+function pilotPeriodDays() {
+  const days = Number(pilotPeriod.value);
+  return Number.isFinite(days) && days > 0 ? Math.trunc(days) : 0;
+}
+
+function openPilotSummary() {
+  pilotStatus.textContent = '';
+  pilotSummaryDialog.showModal();
+  loadPilotSummary();
+}
+
+async function loadPilotSummary() {
+  if (typeof parserApi?.getPilotSummary !== 'function') {
+    pilotLoading.hidden = true;
+    pilotContent.hidden = true;
+    pilotEmpty.hidden = false;
+    pilotEmpty.textContent = 'Підсумок пілоту недоступний у цій збірці.';
+    return;
+  }
+  pilotLoading.hidden = false;
+  pilotContent.hidden = true;
+  pilotEmpty.hidden = true;
+  pilotStatus.textContent = '';
+  setPilotActionsBusy(true);
+  try {
+    currentPilotSummary = await parserApi.getPilotSummary({ days: pilotPeriodDays() });
+    renderPilotSummary(currentPilotSummary);
+  } catch (_error) {
+    currentPilotSummary = null;
+    pilotLoading.hidden = true;
+    pilotContent.hidden = true;
+    pilotEmpty.hidden = false;
+    pilotEmpty.textContent = 'Не вдалося прочитати локальну статистику. Перезапустіть програму та спробуйте ще раз.';
+  } finally {
+    setPilotActionsBusy(false);
+  }
+}
+
+function setPilotActionsBusy(busy) {
+  pilotPeriod.disabled = busy;
+  pilotRefreshButton.disabled = busy;
+  pilotCopyButton.disabled = busy || !currentPilotSummary?.totals?.searches;
+  pilotExportButton.disabled = busy || !currentPilotSummary?.totals?.searches;
+}
+
+function renderPilotSummary(summary) {
+  const totals = summary?.totals || {};
+  const hasSearches = Number(totals.searches) > 0;
+  pilotLoading.hidden = true;
+  pilotContent.hidden = !hasSearches;
+  pilotEmpty.hidden = hasSearches;
+  if (!hasSearches) {
+    pilotEmpty.textContent = 'Поки що немає завершених пошуків. Після першої перевірки статистика з’явиться автоматично.';
+    setPilotActionsBusy(false);
+    return;
+  }
+
+  pilotSearches.textContent = formatPilotNumber(totals.searches);
+  pilotSuccessRate.textContent = `${formatPilotNumber(totals.successRate)}%`;
+  pilotProducts.textContent = formatPilotNumber(totals.productCount);
+  pilotDuration.textContent = formatPilotDuration(totals.durationMs);
+  pilotBrands.textContent = formatPilotNumber(totals.uniqueBrands);
+  pilotExports.textContent = formatPilotNumber(totals.excelExports);
+
+  pilotStoreRows.replaceChildren(...(summary.byStore || []).map((row) => createPilotRow([
+    storeName(row.store),
+    formatPilotNumber(row.searches),
+    formatPilotNumber(row.successfulSearches),
+    formatPilotNumber(row.productCount),
+    formatPilotDuration(row.durationMs),
+    formatPilotNumber(row.excelExports),
+  ])));
+  pilotBrandRows.replaceChildren(...(summary.byBrand || []).slice(0, 100).map((row) => createPilotRow([
+    row.brand || '—',
+    formatPilotNumber(row.searches),
+    formatPilotNumber(row.successfulSearches),
+    formatPilotNumber(row.productCount),
+    (row.stores || []).map(storeName).join(', ') || '—',
+    formatPilotDate(row.lastSearchAt),
+  ])));
+  pilotRecentRows.replaceChildren(...(summary.recent || []).map((row) => createPilotRow([
+    formatPilotDate(row.at),
+    (row.stores || []).map(storeName).join(', ') || '—',
+    (row.brands || []).join(', ') || '—',
+    pilotOutcomeLabel(row.outcome),
+    formatPilotNumber(row.productCount),
+    formatPilotDuration(row.durationMs),
+  ])));
+  if ((summary.byBrand || []).length > 100) {
+    pilotStatus.textContent = `У вікні показано 100 найактивніших марок із ${summary.byBrand.length}. Повний список буде у звіті Excel.`;
+  }
+}
+
+function createPilotRow(values) {
+  const row = document.createElement('tr');
+  for (const value of values) {
+    const cell = document.createElement('td');
+    cell.textContent = String(value ?? '');
+    row.append(cell);
+  }
+  return row;
+}
+
+function formatPilotNumber(value) {
+  const number = Number(value);
+  return new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(Number.isFinite(number) ? number : 0);
+}
+
+function formatPilotDuration(value) {
+  const totalSeconds = Math.max(0, Math.round((Number(value) || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return `${hours} год ${minutes} хв`;
+  if (minutes) return `${minutes} хв ${seconds} с`;
+  return `${seconds} с`;
+}
+
+function formatPilotDate(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('uk-UA', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(date);
+}
+
+function pilotOutcomeLabel(value) {
+  return { success: 'Успішно', partial: 'Частково', cancelled: 'Зупинено', error: 'Помилка' }[value] || '—';
+}
+
+function pilotSummaryText(summary) {
+  const totals = summary?.totals || {};
+  const period = summary?.period?.days ? `останні ${summary.period.days} днів` : 'увесь період';
+  const lines = [
+    `Price Monitor — підсумок пілоту (${period})`,
+    `Пошуків: ${formatPilotNumber(totals.searches)}`,
+    `Успішність: ${formatPilotNumber(totals.successRate)}%`,
+    `Торгових марок: ${formatPilotNumber(totals.uniqueBrands)}`,
+    `Підготовлено товарних рядків: ${formatPilotNumber(totals.productCount)}`,
+    `Час роботи програми: ${formatPilotDuration(totals.durationMs)}`,
+    `Excel-вивантажень: ${formatPilotNumber(totals.excelExports)}`,
+  ];
+  for (const row of summary?.byStore || []) {
+    lines.push(`${storeName(row.store)}: ${formatPilotNumber(row.searches)} пошуків, ${formatPilotNumber(row.productCount)} рядків`);
+  }
+  lines.push('Назви торгових марок залишаються лише на комп’ютері користувача.');
+  return lines.join('\n');
+}
+
+async function copyPilotSummary() {
+  if (!currentPilotSummary?.totals?.searches || typeof parserApi?.copyText !== 'function') return;
+  pilotCopyButton.disabled = true;
+  try {
+    await parserApi.copyText(pilotSummaryText(currentPilotSummary));
+    pilotStatus.textContent = 'Підсумок скопійовано. Його можна вставити в лист, месенджер або документ.';
+  } catch (_error) {
+    pilotStatus.textContent = 'Не вдалося скопіювати підсумок.';
+  } finally {
+    pilotCopyButton.disabled = false;
+  }
+}
+
+async function exportPilotSummary() {
+  if (!currentPilotSummary?.totals?.searches || typeof parserApi?.exportPilotSummary !== 'function') return;
+  pilotExportButton.disabled = true;
+  pilotStatus.textContent = 'Готую звіт Excel…';
+  try {
+    const filePath = await parserApi.exportPilotSummary({ days: pilotPeriodDays() });
+    pilotStatus.textContent = filePath ? `Звіт збережено: ${filePath}` : 'Збереження скасовано.';
+  } catch (error) {
+    pilotStatus.textContent = batchUtils.cleanParserError(error);
+  } finally {
+    pilotExportButton.disabled = false;
+  }
 }
 
 function openGuide() {
@@ -2099,6 +2300,7 @@ async function runCrossStoreBarcodeSearch(barcode, requestedStores, { reset }) {
   setBarcodeMonitorBusy(true);
   renderCrossStoreBarcodeResults();
   setBarcodeMonitorStatus('MAKEUP · підтверджую точний штрихкод у картці товару…', 'loading');
+  const pilotStartedAt = Date.now();
 
   try {
     for (const store of stores) {
@@ -2204,6 +2406,29 @@ async function runCrossStoreBarcodeSearch(barcode, requestedStores, { reset }) {
       const finished = await parserApi.finishSearchAccess(accessToken).catch(() => null);
       if (finished?.status) updateAccessUi(finished.status);
     }
+    if (typeof parserApi?.recordPilotSearch === 'function') {
+      const reports = crossBarcodeState.reports.filter((report) => stores.includes(report.store));
+      const hasResult = reports.some((report) => ['success', 'empty', 'partial'].includes(report.status));
+      const hasError = reports.some((report) => ['error', 'partial', 'pending'].includes(report.status));
+      const outcome = crossBarcodeState.cancelled
+        ? 'cancelled'
+        : hasResult && hasError ? 'partial' : hasResult ? 'success' : 'error';
+      const products = crossBarcodeState.products.filter((product) => stores.includes(product.store));
+      parserApi.recordPilotSearch({
+        mode: 'barcode',
+        stores,
+        outcome,
+        durationMs: Date.now() - pilotStartedAt,
+        productCount: products.length,
+        errorCode: hasError ? 'store_search_error' : '',
+        brands: [{
+          query: barcode,
+          brand: crossBarcodeState.reference?.brand || barcode,
+          outcome,
+          productCount: products.length,
+        }],
+      }).catch(() => {});
+    }
     crossBarcodeState.running = false;
     crossBarcodeState.currentStore = '';
     state.parsing = false;
@@ -2236,6 +2461,15 @@ async function exportCrossStoreBarcodeResults() {
       reports: crossBarcodeState.reports,
       capturedAt: crossBarcodeState.capturedAt,
     });
+    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+      parserApi.recordPilotExport({
+        mode: 'barcode',
+        stores: crossBarcodeState.selectedStores,
+        productCount: crossBarcodeState.products.length,
+        rowCount: crossBarcodeState.products.length,
+        brands: [crossBarcodeState.reference?.brand || crossBarcodeState.barcode],
+      }).catch(() => {});
+    }
     setBarcodeMonitorStatus(filePath ? `Excel збережено: ${filePath}` : 'Збереження скасовано.', filePath ? 'success' : 'idle');
   } catch (error) {
     setBarcodeMonitorStatus(batchUtils.cleanParserError(error), 'error');
@@ -2412,6 +2646,7 @@ async function runMultiStoreSearch(stores, queries, { reset }) {
   setMultiStoreBusy(true);
   renderMultiStoreResults();
   setMultiStoreStatus(`Починаю перевірку: ${stores.map(storeName).join(', ')}…`, 'loading');
+  const pilotStartedAt = Date.now();
 
   try {
     for (const store of stores) {
@@ -2528,6 +2763,27 @@ async function runMultiStoreSearch(stores, queries, { reset }) {
       const finished = await parserApi.finishSearchAccess(accessToken).catch(() => null);
       if (finished?.status) updateAccessUi(finished.status);
     }
+    if (typeof parserApi?.recordPilotSearch === 'function') {
+      const reports = multiStoreState.reports.filter((report) => stores.includes(report.store));
+      const hasResult = reports.some((report) => ['success', 'empty', 'partial'].includes(report.status));
+      const hasError = reports.some((report) => ['error', 'partial', 'pending'].includes(report.status));
+      const outcome = multiStoreState.cancelled
+        ? 'cancelled'
+        : hasResult && hasError ? 'partial' : hasResult ? 'success' : 'error';
+      const products = multiStoreState.products.filter((product) => stores.includes(product.store));
+      parserApi.recordPilotSearch({
+        mode: 'multi_store',
+        stores,
+        outcome,
+        durationMs: Date.now() - pilotStartedAt,
+        productCount: products.length,
+        errorCode: hasError ? 'store_search_error' : '',
+        brands: queries.map((query) => {
+          const brandProducts = products.filter((product) => normalizeGuideText(product.brand) === normalizeGuideText(query));
+          return { query, brand: brandProducts[0]?.brand || query, outcome, productCount: brandProducts.length };
+        }),
+      }).catch(() => {});
+    }
     multiStoreState.running = false;
     multiStoreState.currentStore = '';
     state.parsing = false;
@@ -2561,6 +2817,15 @@ async function exportMultiStoreResults() {
       capturedAt: multiStoreState.capturedAt,
       limited: multiStoreState.demoLimitReached,
     });
+    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+      parserApi.recordPilotExport({
+        mode: 'multi_store',
+        stores: multiStoreState.selectedStores,
+        productCount: multiStoreState.products.length,
+        rowCount: multiStoreState.products.length,
+        brands: multiStoreState.queries,
+      }).catch(() => {});
+    }
     setMultiStoreStatus(filePath ? `Excel збережено: ${filePath}` : 'Збереження скасовано.', filePath ? 'success' : 'idle');
   } catch (error) {
     setMultiStoreStatus(batchUtils.cleanParserError(error), 'error');
@@ -2683,6 +2948,8 @@ async function startParsing() {
   const telemetryStartedAt = Date.now();
   let telemetryOutcome = 'error';
   let telemetryErrorCode = 'search_error';
+  let pilotOutcome = 'error';
+  let pilotBrandResults = queries.map((query) => ({ query, brand: query, outcome: 'error', productCount: 0 }));
   const barcodeSearch = requestedStore === 'makeup' && queries.some(looksLikeBarcodeInput);
   const includeVariants = ['eva', 'makeup', 'notino', 'aurora'].includes(requestedStore) && variantsCheckbox.checked;
   const includeSellers = requestedStore === 'rozetka' && sellersCheckbox.checked;
@@ -2757,6 +3024,21 @@ async function startParsing() {
     telemetryOutcome = result.stopped
       ? 'cancelled'
       : result.successes.length ? 'success' : 'error';
+    pilotOutcome = result.stopped
+      ? 'cancelled'
+      : result.successes.length && result.failures.length
+        ? 'partial'
+        : result.successes.length ? 'success' : 'error';
+    pilotBrandResults = result.queries.map((query) => {
+      const success = result.successes.find((item) => item.query === query);
+      const failure = result.failures.find((item) => item.query === query);
+      return {
+        query,
+        brand: success?.brand || query,
+        outcome: success ? 'success' : result.stopped && !failure ? 'cancelled' : 'error',
+        productCount: success?.count || 0,
+      };
+    });
     telemetryErrorCode = result.stopped
       ? 'user_cancelled'
       : result.failures.length ? classifyTelemetryError(result.failures[0]?.message) : '';
@@ -2834,6 +3116,7 @@ async function startParsing() {
     );
   } catch (error) {
     telemetryOutcome = state.cancelRequested || pendingStore ? 'cancelled' : 'error';
+    pilotOutcome = telemetryOutcome;
     telemetryErrorCode = telemetryOutcome === 'cancelled' ? 'user_cancelled' : classifyTelemetryError(error);
     if (!pendingStore) {
       setStatus(batchUtils.cleanParserError(error), 'error');
@@ -2842,6 +3125,7 @@ async function startParsing() {
   } finally {
     if (pendingStore || requestedStore !== state.store || state.cancelRequested) {
       telemetryOutcome = 'cancelled';
+      pilotOutcome = 'cancelled';
       telemetryErrorCode = pendingStore ? 'store_switched' : 'user_cancelled';
     }
     if (typeof parserApi?.reportSearchTelemetry === 'function') {
@@ -2851,6 +3135,17 @@ async function startParsing() {
         durationMs: Date.now() - telemetryStartedAt,
         productCount: state.products.length,
         errorCode: telemetryErrorCode,
+      }).catch(() => {});
+    }
+    if (typeof parserApi?.recordPilotSearch === 'function') {
+      parserApi.recordPilotSearch({
+        mode: 'single',
+        store: requestedStore,
+        outcome: pilotOutcome,
+        durationMs: Date.now() - telemetryStartedAt,
+        productCount: state.products.length,
+        errorCode: telemetryErrorCode,
+        brands: pilotBrandResults,
       }).catch(() => {});
     }
     if (telemetryOutcome === 'error') {
@@ -3171,6 +3466,15 @@ async function exportExcel() {
         maxPrice: exportVisibleOnlyCheckbox.checked ? resultMaxPrice.value : '',
       },
     });
+    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+      parserApi.recordPilotExport({
+        mode: 'single',
+        store: state.store,
+        productCount: products.length,
+        rowCount: products.length,
+        brands: batchUtils.splitBrandQueries(state.capture?.query || state.brand),
+      }).catch(() => {});
+    }
     setStatus(filePath ? `Excel збережено: ${filePath}` : 'Збереження скасовано', filePath ? 'success' : 'idle');
   } catch (error) {
     setStatus(batchUtils.cleanParserError(error), 'error');

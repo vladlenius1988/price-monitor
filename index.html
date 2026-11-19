@@ -17,6 +17,7 @@
       </div>
       <div class="header-actions">
         <button id="show-guide" class="capabilities-button" type="button">Інструкція</button>
+        <button id="show-pilot-summary" class="capabilities-button" type="button">Підсумок пілоту</button>
         <button id="save-diagnostics" class="capabilities-button" type="button" title="Без пошукових запитів, товарів і цін">Зберегти діагностику</button>
         <button id="send-diagnostics" class="capabilities-button" type="button" title="Безпечно передати технічний звіт власнику">Надіслати діагностику</button>
         <button id="show-archive" class="capabilities-button" type="button">Архів перевірок</button>
@@ -243,6 +244,52 @@
     </section>
   </main>
 
+  <dialog id="pilot-summary-dialog" class="capabilities-dialog pilot-summary-dialog" aria-labelledby="pilot-summary-title">
+    <div class="capabilities-heading">
+      <div><p class="eyebrow">Фактична робота програми</p><h2 id="pilot-summary-title">Підсумок пілоту</h2></div>
+      <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
+    </div>
+    <p class="capabilities-intro">Готові цифри для розмови з керівником: скільки перевірок виконано, скільки рядків підготовлено, скільки часу працювала програма та скільки Excel-файлів створено.</p>
+    <div class="pilot-toolbar">
+      <label for="pilot-period">Період
+        <select id="pilot-period">
+          <option value="7">Останні 7 днів</option>
+          <option value="30" selected>Останні 30 днів</option>
+          <option value="0">Увесь період</option>
+        </select>
+      </label>
+      <button id="pilot-refresh" class="compact-button" type="button">Оновити</button>
+      <button id="pilot-copy" class="compact-button" type="button">Копіювати підсумок</button>
+      <button id="pilot-export" class="compact-button accent-button" type="button">Експорт звіту в Excel</button>
+    </div>
+    <p class="pilot-privacy"><strong>Приватність:</strong> торгові марки у цьому звіті зберігаються тільки на цьому комп’ютері. У Price Monitor Owner надходить лише обезличена технічна статистика без назв марок і текстів запитів.</p>
+    <div id="pilot-loading" class="pilot-empty">Завантажую статистику…</div>
+    <div id="pilot-content" hidden>
+      <div class="pilot-metrics" aria-label="Основні показники пілоту">
+        <article><small>Пошуків</small><strong id="pilot-searches">0</strong></article>
+        <article><small>Успішність</small><strong id="pilot-success-rate">0%</strong></article>
+        <article><small>Товарних рядків</small><strong id="pilot-products">0</strong></article>
+        <article><small>Час роботи</small><strong id="pilot-duration">0 с</strong></article>
+        <article><small>Торгових марок</small><strong id="pilot-brands">0</strong></article>
+        <article><small>Excel-вивантажень</small><strong id="pilot-exports">0</strong></article>
+      </div>
+      <div class="pilot-section">
+        <div class="pilot-section-heading"><h3>За магазинами</h3><small>Що саме було перевірено</small></div>
+        <div class="table-wrap"><table class="pilot-table"><thead><tr><th>Магазин</th><th>Пошуків</th><th>Успішних</th><th>Рядків</th><th>Час</th><th>Excel</th></tr></thead><tbody id="pilot-store-rows"></tbody></table></div>
+      </div>
+      <div class="pilot-section">
+        <div class="pilot-section-heading"><h3>За торговими марками</h3><small>Ці назви залишаються локально</small></div>
+        <div class="table-wrap"><table class="pilot-table"><thead><tr><th>Торгова марка</th><th>Пошуків</th><th>Успішних</th><th>Рядків</th><th>Магазини</th><th>Остання перевірка</th></tr></thead><tbody id="pilot-brand-rows"></tbody></table></div>
+      </div>
+      <div class="pilot-section">
+        <div class="pilot-section-heading"><h3>Останні пошуки</h3><small>Для швидкої перевірки деталей</small></div>
+        <div class="table-wrap"><table class="pilot-table"><thead><tr><th>Час</th><th>Магазин</th><th>Марки</th><th>Результат</th><th>Рядків</th><th>Тривалість</th></tr></thead><tbody id="pilot-recent-rows"></tbody></table></div>
+      </div>
+    </div>
+    <div id="pilot-empty" class="pilot-empty" hidden>Поки що немає завершених пошуків. Після першої перевірки статистика з’явиться автоматично.</div>
+    <p id="pilot-status" class="pilot-status" aria-live="polite"></p>
+  </dialog>
+
   <dialog id="barcode-monitor-dialog" class="capabilities-dialog barcode-monitor-dialog" aria-labelledby="barcode-monitor-title">
     <div class="capabilities-heading">
       <div><p class="eyebrow">Порівняння одного товару</p><h2 id="barcode-monitor-title">Штрихкод у всіх магазинах</h2></div>
@@ -445,7 +492,8 @@
         <button type="button" data-guide-target="guide-compare">9. Порівняння</button>
         <button type="button" data-guide-target="guide-backup">10. Резервна копія</button>
         <button type="button" data-guide-target="guide-transfer">11. Інший комп’ютер</button>
-        <button type="button" data-guide-target="guide-problems">12. Якщо є проблема</button>
+        <button type="button" data-guide-target="guide-pilot">12. Підсумок пілоту</button>
+        <button type="button" data-guide-target="guide-problems">13. Якщо є проблема</button>
       </nav>
       <div id="guide-sections" class="guide-sections">
         <section id="guide-install" data-guide-section>
@@ -512,8 +560,15 @@
           <h3>11. Перенесення на інший комп’ютер</h3>
           <ol><li>На старому комп’ютері натисніть «Зберегти копію».</li><li>Встановіть актуальний Setup на новому комп’ютері.</li><li>Натисніть «Відновити з копії» та виберіть JSON-файл.</li><li>Перевірте списки, історію й архів.</li></ol>
         </section>
+        <section id="guide-pilot" data-guide-section>
+          <h3>12. Підсумок пілоту</h3>
+          <p>Кнопка «Підсумок пілоту» показує фактичну роботу програми за 7 днів, 30 днів або весь період: пошуки, успішність, торгові марки, товарні рядки, тривалість і Excel-вивантаження.</p>
+          <ol><li>Виберіть період.</li><li>Перегляньте загальні цифри та деталізацію за магазинами й марками.</li><li>Скопіюйте короткий підсумок для повідомлення або збережіть повний звіт Excel.</li></ol>
+          <p class="guide-note"><strong>Приватність:</strong> назви торгових марок у цьому розділі зберігаються лише на цьому комп’ютері. До Owner надходить тільки обезличена технічна статистика без запитів, товарів, цін і штрихкодів.</p>
+          <p class="guide-warning"><strong>Чесне порівняння:</strong> звіт показує фактичний обсяг і час роботи Price Monitor. Економію часу визначайте порівнянням із таким самим обсягом ручної роботи.</p>
+        </section>
         <section id="guide-problems" data-guide-section>
-          <h3>12. Якщо щось не працює</h3>
+          <h3>13. Якщо щось не працює</h3>
           <ul><li><strong>Товарів не знайдено:</strong> перевірте марку, магазин і наявність. Це нормальний результат, програма не повинна закриватися.</li><li><strong>Каталог не завантажився:</strong> зачекайте й повторіть — сайт може тимчасово не відповідати.</li><li><strong>Rozetka працює годинами:</strong> вимкніть продавців або зупиніть пошук і збережіть уже зібране.</li><li><strong>Portable нестабільна:</strong> використовуйте Setup — це підтримуваний варіант.</li><li><strong>Один магазин перестав працювати:</strong> запишіть магазин, марку, режим і текст помилки.</li></ul>
           <p>Для повідомлення власнику програми надішліть одним повідомленням: дату й час, магазин, марку/запит, увімкнені режими (варіанти, продавці, штрихкоди), що очікували, що сталося, точний текст помилки та скриншот. Поки окремої веб-форми немає — використовуйте звичний Telegram або електронну пошту.</p>
           <p class="guide-note"><strong>Як повідомити про проблему:</strong> натисніть «Надіслати діагностику» — звернення одразу з’явиться у власника Price Monitor. Якщо сервер недоступний, натисніть «Зберегти діагностику» та передайте JSON-файл вручну. Звіт містить версію, стан ліцензії, зв’язок із сервером і технічні коди помилок, але не містить пошукових запитів, брендів, товарів, цін або штрихкодів.</p>
@@ -532,7 +587,7 @@
       </div>
       <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
-    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.</p>
+    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код. «Підсумок пілоту» збирає локальну статистику роботи та формує готовий звіт для оцінки впровадження.</p>
     <div class="capabilities-table-wrap">
       <table class="capabilities-table">
         <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти</th><th>Штрихкоди</th><th>Особливості</th></tr></thead>
