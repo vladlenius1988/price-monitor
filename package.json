@@ -1,6 +1,6 @@
 {
   "name": "retail-price-monitor",
-  "version": "4.33.0",
+  "version": "4.34.0",
   "priceMonitorEdition": "full",
   "description": "Моніторинг цін за торговими марками в EVA, VARUS, MAKEUP, Аврорі, Notino та Rozetka",
   "main": "main.js",
@@ -67,8 +67,6 @@
       "demo-access.js",
       "license-access.js",
       "diagnostic-report.js",
-      "pilot-statistics.js",
-      "pilot-statistics-export.js",
       "device-identity.js",
       "license-public.pem",
       "renderer.js",

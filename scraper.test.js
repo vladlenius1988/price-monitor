@@ -1116,7 +1116,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.33.0');
+  assert.equal(packageJson.version, '4.34.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1124,8 +1124,8 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
   assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
-  assert.ok(packageJson.build.files.includes('pilot-statistics.js'));
-  assert.ok(packageJson.build.files.includes('pilot-statistics-export.js'));
+  assert.equal(packageJson.build.files.includes('pilot-statistics.js'), false);
+  assert.equal(packageJson.build.files.includes('pilot-statistics-export.js'), false);
   assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
@@ -1754,16 +1754,32 @@ test('keeps pilot evidence locally and exports a management-ready report', () =>
   const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
   const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
-  assert.match(html, /id="show-pilot-summary"/);
+  assert.match(html, /id="show-pilot-summary"[^>]+data-demo-only[^>]+hidden/);
   assert.match(html, /id="pilot-summary-dialog"/);
   assert.match(html, /торгові марки у цьому звіті зберігаються тільки на цьому комп’ютері/i);
   assert.match(renderer, /recordPilotSearch/);
   assert.match(renderer, /recordPilotExport/);
+  assert.match(renderer, /pilotStatisticsEnabled = appEdition === 'demo'/);
   assert.match(renderer, /function renderPilotSummary\(summary\)/);
   assert.match(preload, /getPilotSummary/);
   assert.match(preload, /exportPilotSummary/);
+  assert.match(main, /APP_EDITION === 'demo' \? require\('\.\/pilot-statistics'\) : null/);
   assert.match(main, /pilot-statistics\.json/);
   assert.match(main, /ipcMain\.handle\('pilot:export'/);
+  assert.match(main, /edition: APP_EDITION/);
+  const demoConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.demo.yml'), 'utf8');
+  assert.match(demoConfig, /pilot-statistics\.js/);
+  assert.match(demoConfig, /pilot-statistics-export\.js/);
+  for (const fileName of [
+    'electron-builder.cloud-client.yml',
+    'electron-builder.licensed.yml',
+    'electron-builder.local-client.yml',
+    'electron-builder.production-client.yml',
+    'electron-builder.remote-client.yml',
+  ]) {
+    const config = fs.readFileSync(path.join(__dirname, fileName), 'utf8');
+    assert.doesNotMatch(config, /pilot-statistics(?:-export)?\.js/);
+  }
 });
 
 test('recognizes barcode searches in the MAKEUP interface automatically', () => {

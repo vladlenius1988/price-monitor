@@ -19,8 +19,6 @@ const { buildMultiStoreLiveWorkbook } = require('./multi-store-live-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
-const { PilotStatisticsStore } = require('./pilot-statistics');
-const { buildPilotStatisticsWorkbook } = require('./pilot-statistics-export');
 
 const requestedEdition = String(process.env.PRICE_MONITOR_EDITION || packageInfo.priceMonitorEdition || 'full');
 const APP_EDITION = ['demo', 'licensed'].includes(requestedEdition) ? requestedEdition : 'full';
@@ -52,6 +50,8 @@ const editionSettings = {
   appId: String(packageInfo.priceMonitorAppId || editionDefaults.appId),
   userDataName: String(packageInfo.priceMonitorUserDataName || editionDefaults.userDataName),
 };
+const pilotStatisticsModule = APP_EDITION === 'demo' ? require('./pilot-statistics') : null;
+const pilotStatisticsExportModule = APP_EDITION === 'demo' ? require('./pilot-statistics-export') : null;
 
 if (APP_EDITION !== 'full' && typeof app.setPath === 'function' && typeof app.getPath === 'function') {
   const testDataArgument = process.argv.includes('--test-hidden')
@@ -177,6 +177,7 @@ function registerIpcHandlers() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
     name: editionSettings.name,
+    edition: APP_EDITION,
   }));
   ipcMain.handle('stores:list', () => STORES);
 
@@ -267,7 +268,7 @@ function registerIpcHandlers() {
     if (!pilotStatisticsStore) throw new Error('Статистика пілоту ще не готова.');
     const summary = await pilotStatisticsStore.summary(period);
     if (!summary?.totals?.searches) throw new Error('Ще немає завершених пошуків для звіту.');
-    const sheets = buildPilotStatisticsWorkbook(summary);
+    const sheets = pilotStatisticsExportModule.buildPilotStatisticsWorkbook(summary);
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Зберегти підсумок пілоту',
       defaultPath: `Price-Monitor-підсумок-пілоту-${new Date().toISOString().slice(0, 10)}.xlsx`,
@@ -863,7 +864,9 @@ if (!hasSingleInstanceLock) {
     comparisonStore = new ComparisonStore(path.join(app.getPath('userData'), 'price-comparisons.json'));
     archiveStore = new ArchiveStore(path.join(app.getPath('userData'), 'monitoring-archive.json'));
     diagnosticStore = new DiagnosticEventStore(path.join(app.getPath('userData'), 'diagnostic-events.json'));
-    pilotStatisticsStore = new PilotStatisticsStore(path.join(app.getPath('userData'), 'pilot-statistics.json'));
+    if (APP_EDITION === 'demo') {
+      pilotStatisticsStore = new pilotStatisticsModule.PilotStatisticsStore(path.join(app.getPath('userData'), 'pilot-statistics.json'));
+    }
     registerIpcHandlers();
     createMainWindow();
     const liveIntervalMs = Number(packageInfo.priceMonitorLiveLicenseIntervalMs) || 0;

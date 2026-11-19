@@ -252,6 +252,8 @@ let changeOverview = null;
 let changeReportBusy = false;
 let accessStatus = { isDemo: false, isLicensed: false, allowed: true };
 let currentPilotSummary = null;
+let appEdition = '';
+let pilotStatisticsEnabled = false;
 const crossBarcodeState = {
   running: false,
   cancelled: false,
@@ -491,9 +493,15 @@ if (parserAvailable) {
 async function initializeAppInfo() {
   const info = await parserApi?.getAppInfo?.();
   const version = String(info?.version || '').trim();
+  appEdition = String(info?.edition || '').trim();
+  pilotStatisticsEnabled = appEdition === 'demo';
+  document.querySelectorAll('[data-demo-only]').forEach((element) => {
+    element.hidden = !pilotStatisticsEnabled;
+  });
   document.querySelectorAll('[data-app-version]').forEach((element) => {
     element.textContent = version || 'поточної версії';
   });
+  filterGuideSections();
 }
 
 async function initializeAccess() {
@@ -829,13 +837,14 @@ function pilotPeriodDays() {
 }
 
 function openPilotSummary() {
+  if (!pilotStatisticsEnabled) return;
   pilotStatus.textContent = '';
   pilotSummaryDialog.showModal();
   loadPilotSummary();
 }
 
 async function loadPilotSummary() {
-  if (typeof parserApi?.getPilotSummary !== 'function') {
+  if (!pilotStatisticsEnabled || typeof parserApi?.getPilotSummary !== 'function') {
     pilotLoading.hidden = true;
     pilotContent.hidden = true;
     pilotEmpty.hidden = false;
@@ -973,7 +982,7 @@ function pilotSummaryText(summary) {
 }
 
 async function copyPilotSummary() {
-  if (!currentPilotSummary?.totals?.searches || typeof parserApi?.copyText !== 'function') return;
+  if (!pilotStatisticsEnabled || !currentPilotSummary?.totals?.searches || typeof parserApi?.copyText !== 'function') return;
   pilotCopyButton.disabled = true;
   try {
     await parserApi.copyText(pilotSummaryText(currentPilotSummary));
@@ -986,7 +995,7 @@ async function copyPilotSummary() {
 }
 
 async function exportPilotSummary() {
-  if (!currentPilotSummary?.totals?.searches || typeof parserApi?.exportPilotSummary !== 'function') return;
+  if (!pilotStatisticsEnabled || !currentPilotSummary?.totals?.searches || typeof parserApi?.exportPilotSummary !== 'function') return;
   pilotExportButton.disabled = true;
   pilotStatus.textContent = 'Готую звіт Excel…';
   try {
@@ -1014,9 +1023,13 @@ function normalizeGuideText(value) {
 function filterGuideSections() {
   const tokens = normalizeGuideText(guideSearch.value).split(/\s+/).filter(Boolean);
   let visibleCount = 0;
+  const availableCount = guideSectionElements.filter((section) => (
+    !section.hasAttribute('data-demo-only') || pilotStatisticsEnabled
+  )).length;
 
   guideSectionElements.forEach((section) => {
-    const matches = tokens.every((token) => normalizeGuideText(section.textContent).includes(token));
+    const editionAllowed = !section.hasAttribute('data-demo-only') || pilotStatisticsEnabled;
+    const matches = editionAllowed && tokens.every((token) => normalizeGuideText(section.textContent).includes(token));
     section.hidden = !matches;
     const navButton = guideNav.querySelector(`[data-guide-target="${section.id}"]`);
     if (navButton) {
@@ -1028,8 +1041,8 @@ function filterGuideSections() {
 
   guideEmpty.hidden = visibleCount > 0;
   guideFilterCount.textContent = tokens.length
-    ? `Знайдено ${visibleCount} із ${guideSectionElements.length} розділів.`
-    : `Усі ${guideSectionElements.length} розділів інструкції.`;
+    ? `Знайдено ${visibleCount} із ${availableCount} розділів.`
+    : `Усі ${availableCount} розділів інструкції.`;
 }
 
 function navigateGuide(event) {
@@ -2406,7 +2419,7 @@ async function runCrossStoreBarcodeSearch(barcode, requestedStores, { reset }) {
       const finished = await parserApi.finishSearchAccess(accessToken).catch(() => null);
       if (finished?.status) updateAccessUi(finished.status);
     }
-    if (typeof parserApi?.recordPilotSearch === 'function') {
+    if (pilotStatisticsEnabled && typeof parserApi?.recordPilotSearch === 'function') {
       const reports = crossBarcodeState.reports.filter((report) => stores.includes(report.store));
       const hasResult = reports.some((report) => ['success', 'empty', 'partial'].includes(report.status));
       const hasError = reports.some((report) => ['error', 'partial', 'pending'].includes(report.status));
@@ -2461,7 +2474,7 @@ async function exportCrossStoreBarcodeResults() {
       reports: crossBarcodeState.reports,
       capturedAt: crossBarcodeState.capturedAt,
     });
-    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+    if (pilotStatisticsEnabled && filePath && typeof parserApi?.recordPilotExport === 'function') {
       parserApi.recordPilotExport({
         mode: 'barcode',
         stores: crossBarcodeState.selectedStores,
@@ -2763,7 +2776,7 @@ async function runMultiStoreSearch(stores, queries, { reset }) {
       const finished = await parserApi.finishSearchAccess(accessToken).catch(() => null);
       if (finished?.status) updateAccessUi(finished.status);
     }
-    if (typeof parserApi?.recordPilotSearch === 'function') {
+    if (pilotStatisticsEnabled && typeof parserApi?.recordPilotSearch === 'function') {
       const reports = multiStoreState.reports.filter((report) => stores.includes(report.store));
       const hasResult = reports.some((report) => ['success', 'empty', 'partial'].includes(report.status));
       const hasError = reports.some((report) => ['error', 'partial', 'pending'].includes(report.status));
@@ -2817,7 +2830,7 @@ async function exportMultiStoreResults() {
       capturedAt: multiStoreState.capturedAt,
       limited: multiStoreState.demoLimitReached,
     });
-    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+    if (pilotStatisticsEnabled && filePath && typeof parserApi?.recordPilotExport === 'function') {
       parserApi.recordPilotExport({
         mode: 'multi_store',
         stores: multiStoreState.selectedStores,
@@ -3137,7 +3150,7 @@ async function startParsing() {
         errorCode: telemetryErrorCode,
       }).catch(() => {});
     }
-    if (typeof parserApi?.recordPilotSearch === 'function') {
+    if (pilotStatisticsEnabled && typeof parserApi?.recordPilotSearch === 'function') {
       parserApi.recordPilotSearch({
         mode: 'single',
         store: requestedStore,
@@ -3466,7 +3479,7 @@ async function exportExcel() {
         maxPrice: exportVisibleOnlyCheckbox.checked ? resultMaxPrice.value : '',
       },
     });
-    if (filePath && typeof parserApi?.recordPilotExport === 'function') {
+    if (pilotStatisticsEnabled && filePath && typeof parserApi?.recordPilotExport === 'function') {
       parserApi.recordPilotExport({
         mode: 'single',
         store: state.store,
