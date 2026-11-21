@@ -169,6 +169,17 @@ const multiStoreMonitorStores = document.getElementById('multi-store-monitor-sto
 const multiStoreMonitorEmpty = document.getElementById('multi-store-monitor-empty');
 const multiStoreMonitorTableWrap = document.getElementById('multi-store-monitor-table-wrap');
 const multiStoreMonitorRows = document.getElementById('multi-store-monitor-rows');
+const monitoringProjectSelect = document.getElementById('monitor-project-select');
+const monitoringProjectName = document.getElementById('monitor-project-name');
+const monitoringProjectSchedule = document.getElementById('monitor-project-schedule');
+const monitoringProjectTimeField = document.getElementById('monitor-project-time-field');
+const monitoringProjectTime = document.getElementById('monitor-project-time');
+const monitoringProjectLoad = document.getElementById('monitor-project-load');
+const monitoringProjectSave = document.getElementById('monitor-project-save');
+const monitoringProjectRun = document.getElementById('monitor-project-run');
+const monitoringProjectDelete = document.getElementById('monitor-project-delete');
+const monitoringProjectStatus = document.getElementById('monitor-project-status');
+const monitoringProjectCount = document.getElementById('monitor-project-count');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -227,6 +238,7 @@ const comparisonUtils = window.priceMonitorComparison;
 const archiveTools = window.priceMonitorArchiveTools;
 const crossStoreBarcodeUtils = window.priceMonitorCrossStoreBarcode;
 const multiStoreSearchUtils = window.priceMonitorMultiStoreSearch;
+const monitoringProjectUtils = window.priceMonitorMonitoringProjects;
 const parserAvailable = Boolean(parserApi?.parseBrand && parserApi?.exportExcel && batchUtils?.runBrandBatch);
 const savedListsAvailable = Boolean(savedListUtils?.parseSavedLists && savedListUtils?.upsertSavedList);
 const searchHistoryAvailable = Boolean(searchHistoryUtils?.parseSearchHistory && searchHistoryUtils?.addSearchHistory);
@@ -236,12 +248,16 @@ const comparisonAvailable = Boolean(
   && parserApi?.getComparisonSnapshot
   && parserApi?.saveComparisonSnapshot,
 );
+const BARCODE_STORE_PREFERENCE_KEY = 'price-monitor:barcode-stores:v1';
+const MULTI_STORE_PREFERENCE_KEY = 'price-monitor:multi-stores:v1';
+const MONITORING_PROJECTS_STORAGE_KEY = 'price-monitor:monitoring-projects:v1';
 
 let suggestionTimer = null;
 let suggestionRequest = 0;
 let pendingStore = null;
 let savedLists = readSavedLists();
 let searchHistory = readSearchHistory();
+let monitoringProjects = readMonitoringProjects();
 let archiveSummaries = [];
 let filteredArchiveSummaries = [];
 let priceHistoryRequest = 0;
@@ -281,8 +297,8 @@ const multiStoreState = {
   demoLimitReached: false,
 };
 
-const BARCODE_STORE_PREFERENCE_KEY = 'price-monitor:barcode-stores:v1';
-const MULTI_STORE_PREFERENCE_KEY = 'price-monitor:multi-stores:v1';
+let monitoringProjectTimer = null;
+let scheduledProjectRunning = false;
 
 storeButtons.forEach((button) => {
   button.addEventListener('click', () => selectStore(button.dataset.store));
@@ -384,6 +400,14 @@ multiStoreMonitorRetry.addEventListener('click', retryMultiStoreErrors);
 multiStoreMonitorExport.addEventListener('click', exportMultiStoreResults);
 multiStoreMonitorMode.addEventListener('change', saveMultiStorePreferences);
 multiStoreMonitorStorePicker.addEventListener('change', saveMultiStorePreferences);
+monitoringProjectSelect.addEventListener('change', renderMonitoringProjectSelection);
+monitoringProjectSchedule.addEventListener('change', () => {
+  monitoringProjectTimeField.hidden = monitoringProjectSchedule.value !== 'daily';
+});
+monitoringProjectLoad.addEventListener('click', applySelectedMonitoringProject);
+monitoringProjectSave.addEventListener('click', saveMonitoringProject);
+monitoringProjectRun.addEventListener('click', runSelectedMonitoringProject);
+monitoringProjectDelete.addEventListener('click', deleteMonitoringProject);
 multiStoreMonitorQuery.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -459,6 +483,7 @@ window.addEventListener('unhandledrejection', () => recordDiagnosticEvent({ area
 
 renderSavedLists();
 renderSearchHistory();
+renderMonitoringProjects();
 initializeAppInfo().catch(() => {});
 
 if (parserAvailable) {
@@ -481,7 +506,7 @@ if (parserAvailable) {
     );
   });
   setStatus('Введіть одну або кілька торгових марок', 'idle');
-  initializeAccess().catch(() => {});
+  initializeAccess().then(startMonitoringProjectScheduler).catch(() => {});
   parserApi.onAccessChanged?.((status) => updateAccessUi(status));
   parserApi.onUpdateAvailable?.((update) => showAvailableUpdate(update));
   parserApi.onUpdateProgress?.((progress) => showUpdateDownloadProgress(progress));
@@ -1342,6 +1367,7 @@ async function exportSavedLists() {
       searchHistory,
       comparisonSnapshots,
       archives,
+      monitoringProjects,
     );
     const filePath = await parserApi.exportSavedLists(backup);
     setStatus(
@@ -1368,6 +1394,7 @@ async function importSavedLists() {
     const imported = savedListUtils.parsePriceMonitorBackup(selected.contents);
     const listResult = savedListUtils.mergeSavedLists(savedLists, imported.lists);
     const historyResult = searchHistoryUtils.mergeSearchHistory(searchHistory, imported.searchHistory);
+    const projectResult = monitoringProjectUtils.mergeMonitoringProjects(monitoringProjects, imported.monitoringProjects);
     const comparisonResult = typeof parserApi?.mergeComparisonSnapshots === 'function'
       ? await parserApi.mergeComparisonSnapshots(imported.comparisonSnapshots)
       : { added: 0, updated: 0 };
@@ -1376,25 +1403,31 @@ async function importSavedLists() {
       : { added: 0 };
     savedLists = listResult.lists;
     searchHistory = historyResult.history;
-    if (!writeSavedLists() || !writeSearchHistory()) {
+    monitoringProjects = projectResult.projects;
+    if (!writeSavedLists() || !writeSearchHistory() || !writeMonitoringProjects()) {
       throw new Error('Не вдалося зберегти відновлені дані на цьому комп’ютері.');
     }
     renderSavedLists();
     renderSearchHistory();
+    renderMonitoringProjects();
     const details = [
       listResult.added ? `списків додано ${listResult.added}` : '',
       listResult.updated ? `списків оновлено ${listResult.updated}` : '',
       historyResult.added ? `пошуків додано ${historyResult.added}` : '',
       historyResult.updated ? `пошуків оновлено ${historyResult.updated}` : '',
+      projectResult.added ? `проєктів додано ${projectResult.added}` : '',
+      projectResult.updated ? `проєктів оновлено ${projectResult.updated}` : '',
       comparisonResult.added ? `порівнянь додано ${comparisonResult.added}` : '',
       comparisonResult.updated ? `порівнянь оновлено ${comparisonResult.updated}` : '',
       archiveResult.added ? `перевірок додано ${archiveResult.added}` : '',
       listResult.skipped ? `пропущено ${listResult.skipped}` : '',
+      projectResult.skipped ? `проєктів пропущено ${projectResult.skipped}` : '',
     ].filter(Boolean).join(', ');
-    const hasData = imported.lists.length || imported.searchHistory.length || imported.comparisonSnapshots.length || imported.archives.length;
+    const hasData = imported.lists.length || imported.searchHistory.length || imported.comparisonSnapshots.length
+      || imported.archives.length || imported.monitoringProjects.length;
     setStatus(hasData
       ? `Відновлення завершено: ${details || 'змін немає'}.`
-      : 'Резервна копія не містить списків, історії, порівнянь або архіву.', hasData ? 'success' : 'warning');
+      : 'Резервна копія не містить списків, проєктів, історії, порівнянь або архіву.', hasData ? 'success' : 'warning');
   } catch (error) {
     setStatus(batchUtils.cleanParserError(error), 'error');
   } finally {
@@ -2209,6 +2242,211 @@ function saveMultiStorePreferences() {
   localStorage.setItem(MULTI_STORE_PREFERENCE_KEY, JSON.stringify({ stores, mode: multiStoreMonitorMode.value }));
 }
 
+function readMonitoringProjects() {
+  if (!monitoringProjectUtils?.parseMonitoringProjects) return [];
+  return monitoringProjectUtils.parseMonitoringProjects(localStorage.getItem(MONITORING_PROJECTS_STORAGE_KEY) || '[]');
+}
+
+function writeMonitoringProjects() {
+  try {
+    localStorage.setItem(MONITORING_PROJECTS_STORAGE_KEY, JSON.stringify(monitoringProjects));
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function renderMonitoringProjects(selectedId = monitoringProjectSelect.value) {
+  if (!monitoringProjectUtils) return;
+  monitoringProjectSelect.replaceChildren(
+    optionElement('', 'Новий проєкт'),
+    ...monitoringProjects.map((project) => optionElement(project.id, project.name)),
+  );
+  monitoringProjectSelect.value = monitoringProjects.some((project) => project.id === selectedId) ? selectedId : '';
+  monitoringProjectCount.textContent = `${monitoringProjects.length} ${ukPlural(monitoringProjects.length, 'проєкт', 'проєкти', 'проєктів')}`;
+  renderMonitoringProjectSelection();
+}
+
+function renderMonitoringProjectSelection() {
+  const project = selectedMonitoringProject();
+  monitoringProjectLoad.disabled = !project || multiStoreState.running;
+  monitoringProjectRun.disabled = !project || multiStoreState.running || isAccessBlocked();
+  monitoringProjectDelete.disabled = !project || multiStoreState.running;
+  if (!project) {
+    monitoringProjectName.value = '';
+    monitoringProjectSchedule.value = 'manual';
+    monitoringProjectTime.value = '09:00';
+    monitoringProjectTimeField.hidden = true;
+    setMonitoringProjectStatus('Створіть проєкт із поточного запиту, магазинів і режиму. Розклад працює, коли Price Monitor відкритий.', 'idle');
+    return;
+  }
+  monitoringProjectName.value = project.name;
+  monitoringProjectSchedule.value = project.schedule.kind;
+  monitoringProjectTime.value = project.schedule.time;
+  monitoringProjectTimeField.hidden = project.schedule.kind !== 'daily';
+  const stores = project.stores.map(storeName).join(', ');
+  const lastRun = project.lastCompletedAt ? formatMonitoringProjectDate(project.lastCompletedAt) : 'ще не запускався';
+  const outcomes = {
+    success: `успішно · ${project.lastProductCount} рядків`,
+    partial: `частково · ${project.lastProductCount} рядків`,
+    cancelled: `зупинено · ${project.lastProductCount} рядків`,
+    error: 'помилка',
+    running: 'виконується',
+  };
+  let schedule = 'лише вручну';
+  if (project.schedule.kind === 'daily') {
+    const due = monitoringProjectUtils.findDueProject([project], new Date());
+    const next = monitoringProjectUtils.nextRunAt(project, new Date());
+    schedule = due ? `щодня о ${project.schedule.time} · очікує запуску`
+      : `щодня о ${project.schedule.time}${next ? ` · наступний: ${formatMonitoringProjectDate(next)}` : ''}`;
+  }
+  setMonitoringProjectStatus(
+    `${stores} · ${schedule}. Останній запуск: ${lastRun}${project.lastOutcome ? ` · ${outcomes[project.lastOutcome] || project.lastOutcome}` : ''}.`,
+    project.lastOutcome === 'error' ? 'warning' : 'idle',
+  );
+}
+
+function saveMonitoringProject() {
+  if (multiStoreState.running || !monitoringProjectUtils) return;
+  const name = monitoringProjectName.value.trim();
+  const query = multiStoreMonitorQuery.value.trim();
+  const stores = selectedMonitorStores(multiStoreMonitorStorePicker);
+  if (!name) return setMonitoringProjectStatus('Введіть назву проєкту.', 'error');
+  if (!batchUtils.splitBrandQueries(query).length) return setMonitoringProjectStatus('Введіть хоча б одну торгову марку.', 'error');
+  if (stores.length < 2) return setMonitoringProjectStatus('Оберіть щонайменше два магазини.', 'error');
+  const existing = selectedMonitoringProject();
+  const result = monitoringProjectUtils.upsertMonitoringProject(monitoringProjects, {
+    ...existing,
+    id: existing?.id,
+    name,
+    query,
+    stores,
+    mode: multiStoreMonitorMode.value,
+    schedule: { kind: monitoringProjectSchedule.value, time: monitoringProjectTime.value },
+  });
+  if (!result.item) return setMonitoringProjectStatus(result.full ? 'Збережено максимальну кількість проєктів.' : 'Не вдалося зберегти проєкт.', 'error');
+  monitoringProjects = result.projects;
+  if (!writeMonitoringProjects()) return setMonitoringProjectStatus('Не вдалося записати проєкт на цьому комп’ютері.', 'error');
+  renderMonitoringProjects(result.item.id);
+  setMonitoringProjectStatus(`Проєкт «${result.item.name}» збережено разом із запитом, режимом і магазинами.`, 'success');
+}
+
+function applySelectedMonitoringProject() {
+  const project = selectedMonitoringProject();
+  if (!project) return;
+  if (applyMonitoringProject(project)) {
+    setMonitoringProjectStatus(`Проєкт «${project.name}» застосовано. Можна запускати моніторинг.`, 'success');
+  }
+}
+
+function applyMonitoringProject(project) {
+  const allowed = allowedMultiStoreIds();
+  const stores = project.stores.filter((store) => allowed.includes(store));
+  if (stores.length < 2) {
+    setMonitoringProjectStatus('Для цього проєкту поточна ліцензія дозволяє менше двох магазинів.', 'error');
+    return false;
+  }
+  multiStoreMonitorQuery.value = project.query;
+  multiStoreMonitorMode.value = project.mode;
+  renderMonitorStorePicker(multiStoreMonitorStorePicker, stores);
+  saveMultiStorePreferences();
+  return true;
+}
+
+async function runSelectedMonitoringProject() {
+  const project = selectedMonitoringProject();
+  if (project) await runMonitoringProject(project, { scheduled: false });
+}
+
+async function runMonitoringProject(project, { scheduled }) {
+  if (state.parsing || scheduledProjectRunning || isAccessBlocked()) return;
+  scheduledProjectRunning = true;
+  try {
+    if (!multiStoreMonitorDialog.open) multiStoreMonitorDialog.showModal();
+    if (!applyMonitoringProject(project)) {
+      if (scheduled) recordMonitoringProjectFailure(project.id);
+      return;
+    }
+    const queries = batchUtils.splitBrandQueries(project.query);
+    const stores = project.stores.filter((store) => allowedMultiStoreIds().includes(store));
+    if (!queries.length || stores.length < 2 || !validateMultiStoreDemoCalls(stores, queries.length, setMultiStoreStatus)) {
+      if (scheduled) recordMonitoringProjectFailure(project.id);
+      return;
+    }
+    monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, new Date());
+    writeMonitoringProjects();
+    renderMonitoringProjects(project.id);
+    setMonitoringProjectStatus(`${scheduled ? 'Плановий' : 'Ручний'} запуск проєкту «${project.name}» розпочато.`, 'success');
+    const result = await runMultiStoreSearch(stores, queries, { reset: true });
+    monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, project.id, {
+      outcome: result?.outcome || 'error',
+      productCount: result?.productCount || 0,
+      completedAt: new Date(),
+    });
+    writeMonitoringProjects();
+    renderMonitoringProjects(project.id);
+  } finally {
+    scheduledProjectRunning = false;
+  }
+}
+
+function recordMonitoringProjectFailure(projectId) {
+  monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, projectId, new Date());
+  monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, projectId, {
+    outcome: 'error', productCount: 0, completedAt: new Date(),
+  });
+  writeMonitoringProjects();
+  renderMonitoringProjects(projectId);
+}
+
+function deleteMonitoringProject() {
+  const project = selectedMonitoringProject();
+  if (!project || multiStoreState.running || !window.confirm(`Видалити проєкт «${project.name}»?`)) return;
+  monitoringProjects = monitoringProjectUtils.removeMonitoringProject(monitoringProjects, project.id);
+  if (!writeMonitoringProjects()) return setMonitoringProjectStatus('Не вдалося видалити проєкт на цьому комп’ютері.', 'error');
+  renderMonitoringProjects();
+  setMonitoringProjectStatus(`Проєкт «${project.name}» видалено.`, 'warning');
+}
+
+function selectedMonitoringProject() {
+  return monitoringProjects.find((project) => project.id === monitoringProjectSelect.value) || null;
+}
+
+function startMonitoringProjectScheduler() {
+  if (!monitoringProjectUtils || monitoringProjectTimer) return;
+  window.setTimeout(() => checkScheduledMonitoringProjects().catch(() => {}), 2500);
+  monitoringProjectTimer = window.setInterval(() => checkScheduledMonitoringProjects().catch(() => {}), 60_000);
+}
+
+async function checkScheduledMonitoringProjects() {
+  if (state.parsing || scheduledProjectRunning || isAccessBlocked()) return;
+  const openDialog = document.querySelector('dialog[open]');
+  if (openDialog && openDialog !== multiStoreMonitorDialog) return;
+  const project = monitoringProjectUtils.findDueProject(monitoringProjects, new Date());
+  if (!project) return;
+  monitoringProjectSelect.value = project.id;
+  renderMonitoringProjectSelection();
+  await runMonitoringProject(project, { scheduled: true });
+}
+
+function setMonitoringProjectStatus(message, type = 'idle') {
+  monitoringProjectStatus.textContent = message;
+  monitoringProjectStatus.dataset.type = type;
+}
+
+function formatMonitoringProjectDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+}
+
+function optionElement(value, label) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
 function validateMultiStoreDemoCalls(stores, queryCount, setMessage) {
   if (!accessStatus.isDemo) return true;
   const callCount = multiStoreSearchUtils.totalParseCalls(stores, Array.from({ length: queryCount }));
@@ -2590,7 +2828,8 @@ function openMultiStoreMonitor() {
     multiStoreMonitorQuery.value = brandInput.value;
   }
   renderMultiStoreResults();
-  multiStoreMonitorDialog.showModal();
+  renderMonitoringProjects(monitoringProjectSelect.value);
+  if (!multiStoreMonitorDialog.open) multiStoreMonitorDialog.showModal();
   multiStoreMonitorQuery.focus();
   multiStoreMonitorQuery.select();
 }
@@ -2630,7 +2869,7 @@ async function runMultiStoreSearch(stores, queries, { reset }) {
   }
   if (!searchAccess?.allowed) {
     setMultiStoreStatus(accessDeniedMessage(searchAccess?.reason, searchAccess?.status), 'error');
-    return;
+    return { outcome: 'error', productCount: 0 };
   }
   const accessToken = String(searchAccess.token || '');
   if (reset) {
@@ -2805,6 +3044,13 @@ async function runMultiStoreSearch(stores, queries, { reset }) {
     setMultiStoreBusy(false);
     renderMultiStoreResults();
   }
+  const completedReports = multiStoreState.reports.filter((report) => stores.includes(report.store));
+  const hasCompleted = completedReports.some((report) => ['success', 'empty', 'partial'].includes(report.status));
+  const hasProblems = completedReports.some((report) => ['error', 'partial', 'pending', 'stopped'].includes(report.status));
+  return {
+    outcome: multiStoreState.cancelled ? 'cancelled' : hasCompleted && hasProblems ? 'partial' : hasCompleted ? 'success' : 'error',
+    productCount: multiStoreState.products.filter((product) => stores.includes(product.store)).length,
+  };
 }
 
 async function cancelMultiStoreSearch() {
@@ -2897,6 +3143,14 @@ function renderMultiStoreResults() {
 function setMultiStoreBusy(busy) {
   multiStoreMonitorQuery.disabled = busy;
   multiStoreMonitorMode.disabled = busy;
+  monitoringProjectSelect.disabled = busy;
+  monitoringProjectName.disabled = busy;
+  monitoringProjectSchedule.disabled = busy;
+  monitoringProjectTime.disabled = busy;
+  monitoringProjectLoad.disabled = busy || !selectedMonitoringProject();
+  monitoringProjectSave.disabled = busy;
+  monitoringProjectRun.disabled = busy || !selectedMonitoringProject() || isAccessBlocked();
+  monitoringProjectDelete.disabled = busy || !selectedMonitoringProject();
   multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = busy; });
   multiStoreMonitorStart.hidden = busy;
   multiStoreMonitorStart.disabled = busy || isAccessBlocked();
@@ -2906,6 +3160,7 @@ function setMultiStoreBusy(busy) {
   multiStoreMonitorRetry.disabled = busy;
   multiStoreMonitorDialog.querySelectorAll('form[method="dialog"] button').forEach((button) => { button.disabled = busy; });
   multiStoreMonitorSpinner.hidden = !busy;
+  if (!busy) renderMonitoringProjectSelection();
 }
 
 function setMultiStoreStatus(message, type = 'idle') {

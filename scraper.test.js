@@ -187,13 +187,17 @@ test('exports full data, reads legacy backups and safely merges saved lists', ()
     options: {},
     capturedAt: '2026-09-08T10:30:00.000Z',
     products: [],
+  }], [], [{
+    id: 'project-1', name: 'Щоденний догляд', query: 'Nivea', stores: ['eva', 'makeup'],
+    mode: 'fast', schedule: { kind: 'daily', time: '09:00' },
   }]);
   assert.equal(backup.kind, 'price-monitor-backup');
-  assert.equal(backup.formatVersion, 4);
+  assert.equal(backup.formatVersion, 5);
   const fullImport = parsePriceMonitorBackup(JSON.stringify(backup));
   assert.equal(fullImport.searchHistory.length, 1);
   assert.equal(fullImport.comparisonSnapshots.length, 1);
   assert.deepEqual(fullImport.archives, []);
+  assert.equal(fullImport.monitoringProjects.length, 1);
   const imported = parseSavedListsBackup(JSON.stringify(backup));
   const merged = mergeSavedLists(current, imported, () => 'generated-2');
   assert.equal(merged.added, 1);
@@ -218,6 +222,11 @@ test('exports full data, reads legacy backups and safely merges saved lists', ()
     kind: 'price-monitor-backup', formatVersion: 3, lists: current, searchHistory: [], comparisonSnapshots: [],
   });
   assert.deepEqual(versionThree.archives, []);
+  assert.deepEqual(versionThree.monitoringProjects, []);
+  const versionFour = parsePriceMonitorBackup({
+    kind: 'price-monitor-backup', formatVersion: 4, lists: current, searchHistory: [], comparisonSnapshots: [], archives: [],
+  });
+  assert.deepEqual(versionFour.monitoringProjects, []);
   assert.throws(() => parseSavedListsBackup(JSON.stringify({ hello: 'world' })), /не функцією резервного копіювання/);
   assert.throws(() => parsePriceMonitorBackup(JSON.stringify({
     kind: 'price-monitor-backup', formatVersion: 2, lists: [], searchHistory: 'broken',
@@ -225,6 +234,9 @@ test('exports full data, reads legacy backups and safely merges saved lists', ()
   assert.throws(() => parsePriceMonitorBackup(JSON.stringify({
     kind: 'price-monitor-backup', formatVersion: 3, lists: [], searchHistory: [], comparisonSnapshots: 'broken',
   })), /пошкоджені знімки/);
+  assert.throws(() => parsePriceMonitorBackup(JSON.stringify({
+    kind: 'price-monitor-backup', formatVersion: 5, lists: [], searchHistory: [], comparisonSnapshots: [], archives: [], monitoringProjects: 'broken',
+  })), /пошкоджені проєкти/);
 });
 
 test('normalizes archive data and labels product-count truncation honestly', () => {
@@ -1116,7 +1128,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.34.0');
+  assert.equal(packageJson.version, '4.35.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1144,9 +1156,12 @@ test('runs selected stores together, retries failures and exports one workbook',
     'electron-builder.local-client.yml', 'electron-builder.production-client.yml', 'electron-builder.remote-client.yml',
   ];
   assert.ok(html.indexOf('<script src="multi-store-search.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
+  assert.ok(html.indexOf('<script src="monitoring-projects.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
   assert.match(html, /id="show-multi-store-monitor"/);
   assert.match(html, /id="multi-store-monitor-store-picker"/);
   assert.match(html, /id="multi-store-monitor-retry"/);
+  assert.match(html, /id="monitor-project-select"/);
+  assert.match(html, /id="monitor-project-schedule"/);
   assert.match(html, /id="barcode-monitor-store-picker"/);
   assert.match(html, /id="barcode-monitor-retry"/);
   assert.match(renderer, /async function runMultiStoreSearch/);
@@ -1156,10 +1171,12 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(preload, /exportMultiStoreLive: \(payload\) => ipcRenderer\.invoke\('products:export-multi-store-live'/);
   assert.match(main, /ipcMain\.handle\('products:export-multi-store-live'/);
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
+  assert.ok(packageJson.build.files.includes('monitoring-projects.js'));
   assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
   for (const configName of clientConfigs) {
     const config = fs.readFileSync(path.join(__dirname, configName), 'utf8');
     assert.match(config, /- multi-store-search\.js/, configName);
+    assert.match(config, /- monitoring-projects\.js/, configName);
     assert.match(config, /- multi-store-live-export\.js/, configName);
   }
 });

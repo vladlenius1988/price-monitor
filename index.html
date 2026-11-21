@@ -333,6 +333,25 @@
       <form method="dialog"><button id="multi-store-monitor-close" class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
     <p class="capabilities-intro">Введіть одну або кілька торгових марок, оберіть магазини та отримайте спільну таблицю. Помилка одного магазину не видаляє результати інших, а повторна перевірка запускає лише проблемні джерела.</p>
+    <section class="monitor-project-panel" aria-labelledby="monitor-project-heading">
+      <div class="monitor-project-heading">
+        <div><strong id="monitor-project-heading">Проєкти моніторингу</strong><small>Збережіть весь сценарій і запускайте його вручну або щодня.</small></div>
+        <span id="monitor-project-count">0 проєктів</span>
+      </div>
+      <div class="monitor-project-fields">
+        <label for="monitor-project-select">Збережений проєкт<select id="monitor-project-select"><option value="">Новий проєкт</option></select></label>
+        <label for="monitor-project-name">Назва<input id="monitor-project-name" type="text" maxlength="80" autocomplete="off" placeholder="Наприклад: Щоденний догляд"></label>
+        <label for="monitor-project-schedule">Запуск<select id="monitor-project-schedule"><option value="manual">Лише вручну</option><option value="daily">Щодня</option></select></label>
+        <label id="monitor-project-time-field" for="monitor-project-time" hidden>Час<input id="monitor-project-time" type="time" value="09:00"></label>
+      </div>
+      <div class="monitor-project-actions">
+        <button id="monitor-project-load" class="compact-button" type="button" disabled>Застосувати</button>
+        <button id="monitor-project-save" class="compact-button" type="button">Зберегти проєкт</button>
+        <button id="monitor-project-run" class="compact-button" type="button" disabled>Запустити зараз</button>
+        <button id="monitor-project-delete" class="compact-button danger-button" type="button" disabled>Видалити</button>
+      </div>
+      <p id="monitor-project-status" class="monitor-project-status">Плановий запуск відбудеться, якщо Price Monitor відкритий. Пропущений час наздоженеться після запуску програми цього дня.</p>
+    </section>
     <div class="barcode-monitor-search multi-store-monitor-search">
       <label for="multi-store-monitor-query">Торгові марки<input id="multi-store-monitor-query" type="text" maxlength="500" autocomplete="off" spellcheck="false" placeholder="Наприклад: Nivea, Dove"></label>
       <label for="multi-store-monitor-mode">Режим<select id="multi-store-monitor-mode"><option value="fast">Швидко</option><option value="detailed">Детально</option></select></label>
@@ -509,7 +528,7 @@
           <h3>2. Звичайний пошук товарів</h3>
           <ol><li>Оберіть магазин. За замовчуванням відкривається EVA.</li><li>Введіть торгову марку.</li><li>Кілька марок розділяйте комою, крапкою з комою або новим рядком.</li><li>За потреби увімкніть додатковий режим.</li><li>Натисніть «Знайти товари».</li></ol>
           <p>Помилка однієї марки не видаляє вже знайдені товари. У новому пошуку залишаються позиції, які сайт дозволяє придбати під час перевірки.</p>
-          <p class="guide-note"><strong>Одразу кілька магазинів:</strong> натисніть «Марка в кількох магазинах», введіть марки, залиште потрібні магазини та оберіть швидкий або детальний режим. Результати потраплять у спільну таблицю й окремий Excel. Цей разовий звіт не змінює архів звичайних перевірок.</p>
+          <p class="guide-note"><strong>Одразу кілька магазинів:</strong> натисніть «Марка в кількох магазинах», введіть марки, залиште потрібні магазини та оберіть швидкий або детальний режим. Результати потраплять у спільну таблицю й окремий Excel. Цей звіт не змінює архів звичайних перевірок. Повний сценарій можна зберегти як проєкт моніторингу.</p>
         </section>
         <section id="guide-modes" data-guide-section>
           <h3>3. Додаткові режими магазинів</h3>
@@ -531,8 +550,9 @@
           <p class="guide-note">Rozetka з продавцями — найповільніший режим. Якщо продавці не потрібні, вимкніть галочку до запуску.</p>
         </section>
         <section id="guide-lists" data-guide-section>
-          <h3>6. Збережені списки та історія</h3>
+          <h3>6. Збережені списки, проєкти та історія</h3>
           <p>Запит можна назвати, зберегти, застосувати, одразу запустити, дублювати, перейменувати або видалити. Разом із марками запам’ятовуються галочки варіантів, продавців і штрихкодів.</p>
+          <p class="guide-note"><strong>Проєкти моніторингу:</strong> у вікні «Марка в кількох магазинах» задайте назву, запит, магазини й режим, а потім натисніть «Зберегти проєкт». Його можна застосувати або запустити однією кнопкою. Для щоденного запуску оберіть час і залишайте Price Monitor відкритим: програма виконає проєкт один раз на день, а пропущений час наздожене після запуску цього дня.</p>
           <p>Для кожного магазину окремо зберігаються 12 останніх запитів. Натисніть запис, щоб повернути запит і режими.</p>
         </section>
         <section id="guide-archive" data-guide-section>
@@ -553,7 +573,7 @@
         </section>
         <section id="guide-backup" data-guide-section>
           <h3>10. Резервна копія</h3>
-          <p>«Зберегти копію» створює JSON-файл зі списками, історією запитів, базами порівняння та архівом усіх магазинів. «Відновити з копії» доповнює поточні дані, а не стирає їх повністю.</p>
+          <p>«Зберегти копію» створює JSON-файл зі списками, проєктами моніторингу, історією запитів, базами порівняння та архівом усіх магазинів. «Відновити з копії» доповнює поточні дані, а не стирає їх повністю.</p>
           <p class="guide-note">Робіть копію перед перенесенням на інший комп’ютер або важливим масовим очищенням архіву.</p>
         </section>
         <section id="guide-transfer" data-guide-section>
@@ -587,7 +607,7 @@
       </div>
       <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
-    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.<span data-demo-only hidden> «Підсумок пілоту» у Demo збирає локальну статистику роботи та формує готовий звіт для оцінки впровадження.</span></p>
+    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Такий сценарій можна зберегти як проєкт і запускати вручну або щодня у визначений час, поки програма відкрита. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.<span data-demo-only hidden> «Підсумок пілоту» у Demo збирає локальну статистику роботи та формує готовий звіт для оцінки впровадження.</span></p>
     <div class="capabilities-table-wrap">
       <table class="capabilities-table">
         <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти</th><th>Штрихкоди</th><th>Особливості</th></tr></thead>
@@ -603,7 +623,7 @@
     </div>
     <div class="capabilities-plans">
       <strong>Що ще в плані</strong>
-      <span>Надійний EAN/GTIN для магазинів, які зараз не віддають його публічно, база підтверджених відповідностей штрихкодів, історія цін без обмеження архівом і запуск за розкладом.</span>
+      <span>Надійний EAN/GTIN для магазинів, які зараз не віддають його публічно, база підтверджених відповідностей штрихкодів та історія цін без обмеження локальним архівом.</span>
     </div>
     <form method="dialog" class="capabilities-footer"><button class="primary-button" type="submit">Зрозуміло</button></form>
   </dialog>
@@ -614,6 +634,7 @@
   <script src="archive-tools.js"></script>
   <script src="result-view.js"></script>
   <script src="multi-store-search.js"></script>
+  <script src="monitoring-projects.js"></script>
   <script src="cross-store-barcode.js"></script>
   <script src="renderer.js"></script>
 </body>

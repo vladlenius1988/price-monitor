@@ -22,6 +22,7 @@ files:
   - cross-store-barcode.js
   - cross-store-barcode-export.js
   - multi-store-search.js
+  - monitoring-projects.js
   - multi-store-live-export.js
   - demo-access.js
   - license-access.js

@@ -113,16 +113,18 @@
     searchHistory = [],
     comparisonSnapshots = [],
     archives = [],
+    monitoringProjects = [],
   ) {
     return {
       app: 'Price Monitor',
       kind: 'price-monitor-backup',
-      formatVersion: 4,
+      formatVersion: 5,
       exportedAt: clean(exportedAt, 40),
       lists: parseSavedLists(lists),
       searchHistory: Array.isArray(searchHistory) ? searchHistory : [],
       comparisonSnapshots: Array.isArray(comparisonSnapshots) ? comparisonSnapshots : [],
       archives: Array.isArray(archives) ? archives : [],
+      monitoringProjects: Array.isArray(monitoringProjects) ? monitoringProjects : [],
     };
   }
 
@@ -141,7 +143,9 @@
     const currentBackupV2 = backup?.kind === 'price-monitor-backup' && backup?.formatVersion === 2;
     const currentBackupV3 = backup?.kind === 'price-monitor-backup' && backup?.formatVersion === 3;
     const currentBackupV4 = backup?.kind === 'price-monitor-backup' && backup?.formatVersion === 4;
-    const hasComparisons = currentBackupV3 || currentBackupV4;
+    const currentBackupV5 = backup?.kind === 'price-monitor-backup' && backup?.formatVersion === 5;
+    const hasComparisons = currentBackupV3 || currentBackupV4 || currentBackupV5;
+    const hasArchives = currentBackupV4 || currentBackupV5;
     const currentBackup = currentBackupV2 || hasComparisons;
     const rawLists = legacyArray ? backup : legacyBackup || currentBackup ? backup.lists : null;
     if (!Array.isArray(rawLists)) {
@@ -159,15 +163,19 @@
     if (hasComparisons && !Array.isArray(backup.comparisonSnapshots)) {
       throw new Error('Резервна копія містить пошкоджені знімки порівняння.');
     }
-    if (currentBackupV4 && !Array.isArray(backup.archives)) {
+    if (hasArchives && !Array.isArray(backup.archives)) {
       throw new Error('Резервна копія містить пошкоджений архів перевірок.');
     }
+    if (currentBackupV5 && !Array.isArray(backup.monitoringProjects)) {
+      throw new Error('Резервна копія містить пошкоджені проєкти моніторингу.');
+    }
     return {
-      formatVersion: currentBackupV4 ? 4 : currentBackupV3 ? 3 : currentBackupV2 ? 2 : 1,
+      formatVersion: currentBackupV5 ? 5 : currentBackupV4 ? 4 : currentBackupV3 ? 3 : currentBackupV2 ? 2 : 1,
       lists,
       searchHistory,
       comparisonSnapshots: hasComparisons ? backup.comparisonSnapshots : [],
-      archives: currentBackupV4 ? backup.archives : [],
+      archives: hasArchives ? backup.archives : [],
+      monitoringProjects: currentBackupV5 ? backup.monitoringProjects : [],
     };
   }
 
