@@ -4,6 +4,7 @@
   if (root) root.priceMonitorMonitoringProjects = api;
 }(typeof globalThis !== 'undefined' ? globalThis : this, function createMonitoringProjectsApi() {
   const MAX_PROJECTS = 50;
+  const MAX_RUN_HISTORY = 30;
   const STORE_ORDER = ['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka'];
   const STORE_SET = new Set(STORE_ORDER);
 
@@ -97,11 +98,28 @@
   }
 
   function markMonitoringProjectFinished(projects, id, result = {}) {
-    return patchProject(projects, id, {
-      lastCompletedAt: toIso(result.completedAt || new Date()),
-      lastOutcome: normalizeOutcome(result.outcome),
-      lastProductCount: Math.max(0, Math.floor(Number(result.productCount) || 0)),
-      updatedAt: new Date().toISOString(),
+    const target = clean(id, 100);
+    const completedAt = toIso(result.completedAt || new Date());
+    const outcome = normalizeOutcome(result.outcome) || 'error';
+    const productCount = Math.max(0, Math.floor(Number(result.productCount) || 0));
+    return parseMonitoringProjects(projects).map((project) => {
+      if (project.id !== target) return project;
+      const run = {
+        startedAt: validIso(result.startedAt) || project.lastStartedAt || completedAt,
+        completedAt,
+        trigger: result.trigger === 'scheduled' ? 'scheduled' : 'manual',
+        outcome,
+        productCount,
+        reportFileName: cleanFileName(result.reportFileName),
+      };
+      return {
+        ...project,
+        lastCompletedAt: completedAt,
+        lastOutcome: outcome,
+        lastProductCount: productCount,
+        runHistory: normalizeRunHistory([run, ...project.runHistory]),
+        updatedAt: new Date().toISOString(),
+      };
     });
   }
 
@@ -125,6 +143,7 @@
       lastCompletedAt: validIso(value?.lastCompletedAt),
       lastOutcome: normalizeOutcome(value?.lastOutcome),
       lastProductCount: Math.max(0, Math.floor(Number(value?.lastProductCount) || 0)),
+      runHistory: normalizeRunHistory(value?.runHistory),
       updatedAt: validIso(value?.updatedAt) || new Date().toISOString(),
     };
   }
@@ -161,6 +180,28 @@
   function normalizeOutcome(value) {
     const outcome = clean(value, 20);
     return ['running', 'success', 'partial', 'cancelled', 'error'].includes(outcome) ? outcome : '';
+  }
+
+  function normalizeRunHistory(value) {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, MAX_RUN_HISTORY).map((run) => {
+      const completedAt = validIso(run?.completedAt);
+      const outcome = normalizeOutcome(run?.outcome);
+      if (!completedAt || !outcome || outcome === 'running') return null;
+      return {
+        startedAt: validIso(run?.startedAt) || completedAt,
+        completedAt,
+        trigger: run?.trigger === 'scheduled' ? 'scheduled' : 'manual',
+        outcome,
+        productCount: Math.max(0, Math.floor(Number(run?.productCount) || 0)),
+        reportFileName: cleanFileName(run?.reportFileName),
+      };
+    }).filter(Boolean);
+  }
+
+  function cleanFileName(value) {
+    const name = clean(value, 180);
+    return /[\\/:*?"<>|]/.test(name) ? '' : name;
   }
 
   function validDate(value) {

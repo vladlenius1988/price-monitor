@@ -180,6 +180,9 @@ const monitoringProjectRun = document.getElementById('monitor-project-run');
 const monitoringProjectDelete = document.getElementById('monitor-project-delete');
 const monitoringProjectStatus = document.getElementById('monitor-project-status');
 const monitoringProjectCount = document.getElementById('monitor-project-count');
+const monitoringProjectHistoryCount = document.getElementById('monitor-project-history-count');
+const monitoringProjectHistoryRows = document.getElementById('monitor-project-history-rows');
+const monitoringProjectOpenReports = document.getElementById('monitor-project-open-reports');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -408,6 +411,7 @@ monitoringProjectLoad.addEventListener('click', applySelectedMonitoringProject);
 monitoringProjectSave.addEventListener('click', saveMonitoringProject);
 monitoringProjectRun.addEventListener('click', runSelectedMonitoringProject);
 monitoringProjectDelete.addEventListener('click', deleteMonitoringProject);
+monitoringProjectOpenReports.addEventListener('click', openMonitoringProjectReportsFolder);
 multiStoreMonitorQuery.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -2277,6 +2281,7 @@ function renderMonitoringProjectSelection() {
     monitoringProjectSchedule.value = 'manual';
     monitoringProjectTime.value = '09:00';
     monitoringProjectTimeField.hidden = true;
+    renderMonitoringProjectHistory(null);
     setMonitoringProjectStatus('Створіть проєкт із поточного запиту, магазинів і режиму. Розклад працює, коли Price Monitor відкритий.', 'idle');
     return;
   }
@@ -2304,6 +2309,38 @@ function renderMonitoringProjectSelection() {
     `${stores} · ${schedule}. Останній запуск: ${lastRun}${project.lastOutcome ? ` · ${outcomes[project.lastOutcome] || project.lastOutcome}` : ''}.`,
     project.lastOutcome === 'error' ? 'warning' : 'idle',
   );
+  renderMonitoringProjectHistory(project);
+}
+
+function renderMonitoringProjectHistory(project) {
+  const history = Array.isArray(project?.runHistory) ? project.runHistory : [];
+  monitoringProjectHistoryCount.textContent = String(history.length);
+  monitoringProjectOpenReports.disabled = multiStoreState.running
+    || !history.some((run) => run.reportFileName);
+  if (!history.length) {
+    const empty = document.createElement('p');
+    empty.className = 'monitor-project-history-empty';
+    empty.textContent = project ? 'Проєкт ще не запускався.' : 'Спочатку оберіть збережений проєкт.';
+    monitoringProjectHistoryRows.replaceChildren(empty);
+    return;
+  }
+  const outcomeLabels = { success: 'Успішно', partial: 'Частково', cancelled: 'Зупинено', error: 'Помилка' };
+  monitoringProjectHistoryRows.replaceChildren(...history.map((run) => {
+    const row = document.createElement('div');
+    row.className = 'monitor-project-history-row';
+    const time = document.createElement('strong');
+    time.textContent = formatMonitoringProjectDate(run.completedAt);
+    const trigger = document.createElement('span');
+    trigger.textContent = run.trigger === 'scheduled' ? 'За розкладом' : 'Вручну';
+    const outcome = document.createElement('span');
+    outcome.className = `is-${run.outcome}`;
+    outcome.textContent = `${outcomeLabels[run.outcome] || run.outcome} · ${run.productCount} рядків`;
+    const report = document.createElement('small');
+    report.title = run.reportFileName || '';
+    report.textContent = run.reportFileName || 'Без автоматичного Excel';
+    row.append(time, trigger, outcome, report);
+    return row;
+  }));
 }
 
 function saveMonitoringProject() {
@@ -2364,39 +2401,100 @@ async function runMonitoringProject(project, { scheduled }) {
   try {
     if (!multiStoreMonitorDialog.open) multiStoreMonitorDialog.showModal();
     if (!applyMonitoringProject(project)) {
-      if (scheduled) recordMonitoringProjectFailure(project.id);
+      await recordMonitoringProjectFailure(project, { scheduled });
       return;
     }
     const queries = batchUtils.splitBrandQueries(project.query);
     const stores = project.stores.filter((store) => allowedMultiStoreIds().includes(store));
     if (!queries.length || stores.length < 2 || !validateMultiStoreDemoCalls(stores, queries.length, setMultiStoreStatus)) {
-      if (scheduled) recordMonitoringProjectFailure(project.id);
+      await recordMonitoringProjectFailure(project, { scheduled });
       return;
     }
-    monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, new Date());
+    const startedAt = new Date();
+    monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, startedAt);
     writeMonitoringProjects();
     renderMonitoringProjects(project.id);
     setMonitoringProjectStatus(`${scheduled ? 'Плановий' : 'Ручний'} запуск проєкту «${project.name}» розпочато.`, 'success');
     const result = await runMultiStoreSearch(stores, queries, { reset: true });
+    let reportFileName = '';
+    let reportSaveFailed = false;
+    if (scheduled && result?.productCount > 0 && typeof parserApi?.autoExportMonitoringProject === 'function') {
+      try {
+        const report = await parserApi.autoExportMonitoringProject({
+          projectName: project.name,
+          query: multiStoreState.query,
+          mode: multiStoreState.mode,
+          products: multiStoreState.products,
+          reports: multiStoreState.reports,
+          capturedAt: multiStoreState.capturedAt,
+          limited: multiStoreState.demoLimitReached,
+        });
+        reportFileName = String(report?.fileName || '').trim();
+        if (pilotStatisticsEnabled && reportFileName && typeof parserApi?.recordPilotExport === 'function') {
+          parserApi.recordPilotExport({
+            mode: 'scheduled_project', stores, productCount: result.productCount,
+            rowCount: result.productCount, brands: queries,
+          }).catch(() => {});
+        }
+      } catch (_error) {
+        reportSaveFailed = true;
+      }
+    }
     monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, project.id, {
       outcome: result?.outcome || 'error',
       productCount: result?.productCount || 0,
+      startedAt,
       completedAt: new Date(),
+      trigger: scheduled ? 'scheduled' : 'manual',
+      reportFileName,
     });
     writeMonitoringProjects();
     renderMonitoringProjects(project.id);
+    if (scheduled && typeof parserApi?.notifyMonitoringProject === 'function') {
+      parserApi.notifyMonitoringProject({
+        projectName: project.name,
+        outcome: result?.outcome || 'error',
+        productCount: result?.productCount || 0,
+        reportSaved: Boolean(reportFileName),
+      }).catch(() => {});
+    }
+    if (reportSaveFailed) {
+      setMonitoringProjectStatus(`Проєкт «${project.name}» завершено, але автоматичний Excel не вдалося зберегти. Результати залишилися в таблиці.`, 'warning');
+    } else if (reportFileName) {
+      setMonitoringProjectStatus(`Проєкт «${project.name}» завершено. Excel автоматично збережено: ${reportFileName}`, 'success');
+    }
   } finally {
     scheduledProjectRunning = false;
   }
 }
 
-function recordMonitoringProjectFailure(projectId) {
-  monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, projectId, new Date());
-  monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, projectId, {
-    outcome: 'error', productCount: 0, completedAt: new Date(),
+async function recordMonitoringProjectFailure(project, { scheduled }) {
+  const startedAt = new Date();
+  monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, startedAt);
+  monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, project.id, {
+    outcome: 'error', productCount: 0, startedAt, completedAt: new Date(),
+    trigger: scheduled ? 'scheduled' : 'manual',
   });
   writeMonitoringProjects();
-  renderMonitoringProjects(projectId);
+  renderMonitoringProjects(project.id);
+  if (scheduled && typeof parserApi?.notifyMonitoringProject === 'function') {
+    await parserApi.notifyMonitoringProject({
+      projectName: project.name, outcome: 'error', productCount: 0, reportSaved: false,
+    }).catch(() => {});
+  }
+}
+
+async function openMonitoringProjectReportsFolder() {
+  if (typeof parserApi?.openScheduledReportsFolder !== 'function') return;
+  monitoringProjectOpenReports.disabled = true;
+  try {
+    const result = await parserApi.openScheduledReportsFolder();
+    if (!result?.opened) throw new Error(result?.error || 'Не вдалося відкрити папку звітів.');
+  } catch (error) {
+    setMonitoringProjectStatus(batchUtils.cleanParserError(error), 'error');
+  } finally {
+    renderMonitoringProjectSelection();
+  }
 }
 
 function deleteMonitoringProject() {
@@ -3151,6 +3249,8 @@ function setMultiStoreBusy(busy) {
   monitoringProjectSave.disabled = busy;
   monitoringProjectRun.disabled = busy || !selectedMonitoringProject() || isAccessBlocked();
   monitoringProjectDelete.disabled = busy || !selectedMonitoringProject();
+  monitoringProjectOpenReports.disabled = busy
+    || !selectedMonitoringProject()?.runHistory?.some((run) => run.reportFileName);
   multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = busy; });
   multiStoreMonitorStart.hidden = busy;
   multiStoreMonitorStart.disabled = busy || isAccessBlocked();

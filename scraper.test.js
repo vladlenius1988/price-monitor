@@ -1128,7 +1128,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.35.0');
+  assert.equal(packageJson.version, '4.36.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1169,7 +1169,13 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(renderer, /validateMultiStoreDemoCalls/);
   assert.match(renderer, /async function retryCrossStoreBarcodeErrors/);
   assert.match(preload, /exportMultiStoreLive: \(payload\) => ipcRenderer\.invoke\('products:export-multi-store-live'/);
+  assert.match(preload, /autoExportMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:auto-export-multi-store-live'/);
+  assert.match(preload, /openScheduledReportsFolder: \(\) => ipcRenderer\.invoke\('projects:open-reports-folder'/);
+  assert.match(preload, /notifyMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:notify'/);
   assert.match(main, /ipcMain\.handle\('products:export-multi-store-live'/);
+  assert.match(main, /ipcMain\.handle\('projects:auto-export-multi-store-live'/);
+  assert.match(main, /ipcMain\.handle\('projects:open-reports-folder'/);
+  assert.match(main, /ipcMain\.handle\('projects:notify'/);
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
   assert.ok(packageJson.build.files.includes('monitoring-projects.js'));
   assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));

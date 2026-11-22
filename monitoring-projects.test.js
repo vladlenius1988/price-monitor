@@ -60,10 +60,28 @@ test('run result is stored for a clear project summary', () => {
   const started = markMonitoringProjectStarted([project()], 'morning', new Date(2026, 10, 20, 9, 15, 0));
   const finished = markMonitoringProjectFinished(started, 'morning', {
     completedAt: new Date(2026, 10, 20, 9, 20, 0), outcome: 'partial', productCount: 124,
+    trigger: 'scheduled', reportFileName: 'price_monitor_multi_nivea_2026-11-20.xlsx',
   });
   assert.equal(finished[0].lastOutcome, 'partial');
   assert.equal(finished[0].lastProductCount, 124);
   assert.match(finished[0].lastCompletedAt, /^2026-11-20T/);
+  assert.equal(finished[0].runHistory.length, 1);
+  assert.equal(finished[0].runHistory[0].trigger, 'scheduled');
+  assert.equal(finished[0].runHistory[0].reportFileName, 'price_monitor_multi_nivea_2026-11-20.xlsx');
+});
+
+test('run history stays bounded and rejects unsafe report file names', () => {
+  let projects = [project()];
+  for (let index = 0; index < 35; index += 1) {
+    projects = markMonitoringProjectStarted(projects, 'morning', new Date(2026, 10, 20, 10, index, 0));
+    projects = markMonitoringProjectFinished(projects, 'morning', {
+      completedAt: new Date(2026, 10, 20, 10, index, 30), outcome: 'success', productCount: index,
+      trigger: index % 2 ? 'manual' : 'scheduled', reportFileName: index === 34 ? '..\\secret.xlsx' : `report-${index}.xlsx`,
+    });
+  }
+  assert.equal(projects[0].runHistory.length, 30);
+  assert.equal(projects[0].runHistory[0].productCount, 34);
+  assert.equal(projects[0].runHistory[0].reportFileName, '');
 });
 
 test('backup merge updates same-name project and adds a new one', () => {

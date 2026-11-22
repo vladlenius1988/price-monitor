@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, clipboard, ipcMain, dialog, shell, safeStorage, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -800,6 +800,46 @@ function registerIpcHandlers() {
     await fs.promises.writeFile(result.filePath, buffer);
     return result.filePath;
   });
+
+  ipcMain.handle('projects:auto-export-multi-store-live', async (_event, payload = {}) => {
+    const sheets = buildMultiStoreLiveWorkbook(payload);
+    const directory = scheduledReportsDirectory();
+    await fs.promises.mkdir(directory, { recursive: true });
+    const project = safeFilePart(payload.projectName) || 'project';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath = await uniqueFilePath(directory, `price_monitor_${project}_${stamp}.xlsx`);
+    const buffer = await writeExcelFile(sheets).toBuffer();
+    await fs.promises.writeFile(filePath, buffer);
+    return { filePath, fileName: path.basename(filePath) };
+  });
+
+  ipcMain.handle('projects:open-reports-folder', async () => {
+    const directory = scheduledReportsDirectory();
+    await fs.promises.mkdir(directory, { recursive: true });
+    const error = await shell.openPath(directory);
+    return { opened: !error, error: String(error || '').slice(0, 300) };
+  });
+
+  ipcMain.handle('projects:notify', async (_event, payload = {}) => {
+    if (!Notification?.isSupported?.()) return false;
+    const project = String(payload.projectName || 'Проєкт моніторингу').replace(/\s+/g, ' ').trim().slice(0, 80)
+      || 'Проєкт моніторингу';
+    const outcome = ['success', 'partial', 'cancelled', 'error'].includes(payload.outcome) ? payload.outcome : 'error';
+    const productCount = Math.max(0, Math.min(50_000, Math.floor(Number(payload.productCount) || 0)));
+    const reportSaved = Boolean(payload.reportSaved);
+    const titles = {
+      success: 'Плановий моніторинг завершено',
+      partial: 'Моніторинг завершено частково',
+      cancelled: 'Моніторинг зупинено',
+      error: 'Плановий моніторинг не виконано',
+    };
+    const reportText = reportSaved ? ' Excel збережено автоматично.' : '';
+    new Notification({
+      title: titles[outcome],
+      body: `${project}: ${productCount} рядків.${reportText}`,
+    }).show();
+    return true;
+  });
 }
 
 function numberOrBlank(value) {
@@ -814,6 +854,22 @@ function safeFilePart(value) {
     .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 70);
+}
+
+function scheduledReportsDirectory() {
+  return path.join(app.getPath('documents'), 'Price Monitor', 'Заплановані звіти');
+}
+
+async function uniqueFilePath(directory, fileName) {
+  const extension = path.extname(fileName);
+  const baseName = path.basename(fileName, extension);
+  let candidate = path.join(directory, fileName);
+  let suffix = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(directory, `${baseName}_${suffix}${extension}`);
+    suffix += 1;
+  }
+  return candidate;
 }
 
 function comparisonStatusLabel(status) {
