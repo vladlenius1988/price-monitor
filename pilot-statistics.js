@@ -8,6 +8,7 @@ const MAX_BRANDS_PER_SEARCH = 100;
 const STORE_IDS = new Set(['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka']);
 const SEARCH_OUTCOMES = new Set(['success', 'partial', 'cancelled', 'error']);
 const MODES = new Set(['single', 'multi_store', 'barcode']);
+const ESTIMATED_MANUAL_MS_PER_ROW = 15_000;
 
 class PilotStatisticsStore {
   constructor(filePath, options = {}) {
@@ -159,6 +160,11 @@ function buildPilotSummary(events, options = {}) {
     exportedRows: exports.reduce((sum, event) => sum + event.rowCount, 0),
     uniqueBrands: new Set(searches.flatMap((event) => event.brands.map((brand) => normalizeKey(brand.brand || brand.query))).filter(Boolean)).size,
   };
+  totals.estimatedManualMs = totals.productCount * ESTIMATED_MANUAL_MS_PER_ROW;
+  totals.estimatedSavedMs = Math.max(0, totals.estimatedManualMs - totals.durationMs);
+  totals.estimatedSavedPercent = totals.estimatedManualMs
+    ? Math.round(totals.estimatedSavedMs * 10_000 / totals.estimatedManualMs) / 100
+    : 0;
   const byStore = aggregateStores(searches, exports);
   const byBrand = aggregateBrands(searches);
   const recent = searches.slice(-30).reverse().map((event) => ({
@@ -185,6 +191,10 @@ function buildPilotSummary(events, options = {}) {
     privacy: {
       localOnlyBrands: true,
       noteUa: 'Назви торгових марок зберігаються лише на цьому комп’ютері та не передаються до Owner.',
+    },
+    estimate: {
+      manualMsPerProductRow: ESTIMATED_MANUAL_MS_PER_ROW,
+      noteUa: 'Орієнтир: 15 секунд ручної роботи на товарний рядок мінус фактичний час Price Monitor.',
     },
   };
 }
@@ -266,6 +276,7 @@ function safeDate(value, fallback) {
 }
 
 module.exports = {
+  ESTIMATED_MANUAL_MS_PER_ROW,
   PilotStatisticsStore,
   buildPilotSummary,
   normalizePilotEvent,

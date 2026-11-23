@@ -3,7 +3,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.priceMonitorMonitoringProjects = api;
 }(typeof globalThis !== 'undefined' ? globalThis : this, function createMonitoringProjectsApi() {
-  const MAX_PROJECTS = 50;
+  const MAX_PROJECTS = 200;
   const MAX_RUN_HISTORY = 30;
   const STORE_ORDER = ['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka'];
   const STORE_SET = new Set(STORE_ORDER);

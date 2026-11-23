@@ -1128,7 +1128,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.36.0');
+  assert.equal(packageJson.version, '4.37.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1136,8 +1136,8 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('comparison.js'));
   assert.ok(packageJson.build.files.includes('comparison-store.js'));
   assert.ok(packageJson.build.files.includes('diagnostic-report.js'));
-  assert.equal(packageJson.build.files.includes('pilot-statistics.js'), false);
-  assert.equal(packageJson.build.files.includes('pilot-statistics-export.js'), false);
+  assert.ok(packageJson.build.files.includes('pilot-statistics.js'));
+  assert.ok(packageJson.build.files.includes('pilot-statistics-export.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
@@ -1172,17 +1172,23 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(preload, /autoExportMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:auto-export-multi-store-live'/);
   assert.match(preload, /openScheduledReportsFolder: \(\) => ipcRenderer\.invoke\('projects:open-reports-folder'/);
   assert.match(preload, /notifyMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:notify'/);
+  assert.match(preload, /importMonitoringProjects: \(\) => ipcRenderer\.invoke\('projects:import'/);
+  assert.match(preload, /saveMonitoringProjectTemplate: \(\) => ipcRenderer\.invoke\('projects:save-template'/);
   assert.match(main, /ipcMain\.handle\('products:export-multi-store-live'/);
   assert.match(main, /ipcMain\.handle\('projects:auto-export-multi-store-live'/);
   assert.match(main, /ipcMain\.handle\('projects:open-reports-folder'/);
   assert.match(main, /ipcMain\.handle\('projects:notify'/);
+  assert.match(main, /ipcMain\.handle\('projects:import'/);
+  assert.match(main, /ipcMain\.handle\('projects:save-template'/);
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
   assert.ok(packageJson.build.files.includes('monitoring-projects.js'));
+  assert.ok(packageJson.build.files.includes('monitoring-project-import.js'));
   assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
   for (const configName of clientConfigs) {
     const config = fs.readFileSync(path.join(__dirname, configName), 'utf8');
     assert.match(config, /- multi-store-search\.js/, configName);
     assert.match(config, /- monitoring-projects\.js/, configName);
+    assert.match(config, /- monitoring-project-import\.js/, configName);
     assert.match(config, /- multi-store-live-export\.js/, configName);
   }
 });
@@ -1772,28 +1778,27 @@ test('embeds a searchable offline user guide in the application', () => {
   assert.match(main, /ipcMain\.handle\('app:info'/);
 });
 
-test('keeps pilot evidence locally and exports a management-ready report', () => {
+test('keeps value evidence locally in every client edition and exports a management-ready report', () => {
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
   const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
   const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
-  assert.match(html, /id="show-pilot-summary"[^>]+data-demo-only[^>]+hidden/);
+  assert.match(html, /id="show-pilot-summary"/);
+  assert.doesNotMatch(html, /id="show-pilot-summary"[^>]+hidden/);
   assert.match(html, /id="pilot-summary-dialog"/);
   assert.match(html, /торгові марки у цьому звіті зберігаються тільки на цьому комп’ютері/i);
   assert.match(renderer, /recordPilotSearch/);
   assert.match(renderer, /recordPilotExport/);
-  assert.match(renderer, /pilotStatisticsEnabled = appEdition === 'demo'/);
+  assert.match(renderer, /pilotStatisticsEnabled = typeof parserApi\?\.getPilotSummary === 'function'/);
   assert.match(renderer, /function renderPilotSummary\(summary\)/);
   assert.match(preload, /getPilotSummary/);
   assert.match(preload, /exportPilotSummary/);
-  assert.match(main, /APP_EDITION === 'demo' \? require\('\.\/pilot-statistics'\) : null/);
+  assert.match(main, /require\('\.\/pilot-statistics'\)/);
   assert.match(main, /pilot-statistics\.json/);
   assert.match(main, /ipcMain\.handle\('pilot:export'/);
   assert.match(main, /edition: APP_EDITION/);
-  const demoConfig = fs.readFileSync(path.join(__dirname, 'electron-builder.demo.yml'), 'utf8');
-  assert.match(demoConfig, /pilot-statistics\.js/);
-  assert.match(demoConfig, /pilot-statistics-export\.js/);
   for (const fileName of [
+    'electron-builder.demo.yml',
     'electron-builder.cloud-client.yml',
     'electron-builder.licensed.yml',
     'electron-builder.local-client.yml',
@@ -1801,7 +1806,8 @@ test('keeps pilot evidence locally and exports a management-ready report', () =>
     'electron-builder.remote-client.yml',
   ]) {
     const config = fs.readFileSync(path.join(__dirname, fileName), 'utf8');
-    assert.doesNotMatch(config, /pilot-statistics(?:-export)?\.js/);
+    assert.match(config, /pilot-statistics\.js/);
+    assert.match(config, /pilot-statistics-export\.js/);
   }
 });
 

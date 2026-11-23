@@ -17,7 +17,7 @@
       </div>
       <div class="header-actions">
         <button id="show-guide" class="capabilities-button" type="button">Інструкція</button>
-        <button id="show-pilot-summary" class="capabilities-button" type="button" data-demo-only hidden>Підсумок пілоту</button>
+        <button id="show-pilot-summary" class="capabilities-button" type="button">Цінність роботи</button>
         <button id="save-diagnostics" class="capabilities-button" type="button" title="Без пошукових запитів, товарів і цін">Зберегти діагностику</button>
         <button id="send-diagnostics" class="capabilities-button" type="button" title="Безпечно передати технічний звіт власнику">Надіслати діагностику</button>
         <button id="show-archive" class="capabilities-button" type="button">Архів перевірок</button>
@@ -244,12 +244,12 @@
     </section>
   </main>
 
-  <dialog id="pilot-summary-dialog" class="capabilities-dialog pilot-summary-dialog" aria-labelledby="pilot-summary-title" data-demo-only>
+  <dialog id="pilot-summary-dialog" class="capabilities-dialog pilot-summary-dialog" aria-labelledby="pilot-summary-title">
     <div class="capabilities-heading">
-      <div><p class="eyebrow">Фактична робота програми</p><h2 id="pilot-summary-title">Підсумок пілоту</h2></div>
+      <div><p class="eyebrow">Фактична робота програми</p><h2 id="pilot-summary-title">Цінність Price Monitor</h2></div>
       <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
-    <p class="capabilities-intro">Готові цифри для розмови з керівником: скільки перевірок виконано, скільки рядків підготовлено, скільки часу працювала програма та скільки Excel-файлів створено.</p>
+    <p class="capabilities-intro">Готові цифри для розмови з керівником: скільки перевірок виконано, скільки рядків підготовлено, скільки часу працювала програма та яку частину ручної роботи вона могла замінити.</p>
     <div class="pilot-toolbar">
       <label for="pilot-period">Період
         <select id="pilot-period">
@@ -272,7 +272,10 @@
         <article><small>Час роботи</small><strong id="pilot-duration">0 с</strong></article>
         <article><small>Торгових марок</small><strong id="pilot-brands">0</strong></article>
         <article><small>Excel-вивантажень</small><strong id="pilot-exports">0</strong></article>
+        <article><small>Оцінка ручної роботи</small><strong id="pilot-manual-time">0 с</strong></article>
+        <article><small>Орієнтовно зекономлено</small><strong id="pilot-saved-time">0 с</strong></article>
       </div>
+      <p class="pilot-estimate-note">Оцінка рахується прозоро: 15 секунд ручної роботи на один підготовлений товарний рядок мінус фактичний час роботи Price Monitor. Це орієнтир, а не обіцянка — для пілоту його слід порівняти з реальним ручним процесом.</p>
       <div class="pilot-section">
         <div class="pilot-section-heading"><h3>За магазинами</h3><small>Що саме було перевірено</small></div>
         <div class="table-wrap"><table class="pilot-table"><thead><tr><th>Магазин</th><th>Пошуків</th><th>Успішних</th><th>Рядків</th><th>Час</th><th>Excel</th></tr></thead><tbody id="pilot-store-rows"></tbody></table></div>
@@ -348,9 +351,15 @@
         <button id="monitor-project-load" class="compact-button" type="button" disabled>Застосувати</button>
         <button id="monitor-project-save" class="compact-button" type="button">Зберегти проєкт</button>
         <button id="monitor-project-run" class="compact-button" type="button" disabled>Запустити зараз</button>
+        <button id="monitor-project-import" class="compact-button" type="button">Імпорт Excel / CSV</button>
+        <button id="monitor-project-template" class="compact-button" type="button">Завантажити шаблон</button>
         <button id="monitor-project-delete" class="compact-button danger-button" type="button" disabled>Видалити</button>
       </div>
       <p id="monitor-project-status" class="monitor-project-status">Плановий запуск відбудеться, якщо Price Monitor відкритий. Пропущений час наздоженеться після запуску програми цього дня.</p>
+      <details id="monitor-project-import-errors" class="monitor-project-import-errors" hidden>
+        <summary>Рядки, які потребують виправлення <span id="monitor-project-import-error-count">0</span></summary>
+        <ol id="monitor-project-import-error-list"></ol>
+      </details>
       <details class="monitor-project-history">
         <summary>Історія запусків <span id="monitor-project-history-count">0</span></summary>
         <div class="monitor-project-history-toolbar">
@@ -521,7 +530,7 @@
         <button type="button" data-guide-target="guide-compare">9. Порівняння</button>
         <button type="button" data-guide-target="guide-backup">10. Резервна копія</button>
         <button type="button" data-guide-target="guide-transfer">11. Інший комп’ютер</button>
-        <button type="button" data-guide-target="guide-pilot" data-demo-only hidden>12. Підсумок пілоту</button>
+        <button type="button" data-guide-target="guide-pilot">12. Цінність роботи</button>
         <button type="button" data-guide-target="guide-problems">13. Якщо є проблема</button>
       </nav>
       <div id="guide-sections" class="guide-sections">
@@ -591,12 +600,12 @@
           <h3>11. Перенесення на інший комп’ютер</h3>
           <ol><li>На старому комп’ютері натисніть «Зберегти копію».</li><li>Встановіть актуальний Setup на новому комп’ютері.</li><li>Натисніть «Відновити з копії» та виберіть JSON-файл.</li><li>Перевірте списки, історію й архів.</li></ol>
         </section>
-        <section id="guide-pilot" data-guide-section data-demo-only hidden>
-          <h3>12. Підсумок пілоту</h3>
-          <p>Кнопка «Підсумок пілоту» показує фактичну роботу програми за 7 днів, 30 днів або весь період: пошуки, успішність, торгові марки, товарні рядки, тривалість і Excel-вивантаження.</p>
+        <section id="guide-pilot" data-guide-section>
+          <h3>12. Цінність роботи</h3>
+          <p>Кнопка «Цінність роботи» показує фактичну роботу програми за 7 днів, 30 днів або весь період: пошуки, успішність, торгові марки, товарні рядки, тривалість, Excel-вивантаження та орієнтовну економію часу.</p>
           <ol><li>Виберіть період.</li><li>Перегляньте загальні цифри та деталізацію за магазинами й марками.</li><li>Скопіюйте короткий підсумок для повідомлення або збережіть повний звіт Excel.</li></ol>
           <p class="guide-note"><strong>Приватність:</strong> назви торгових марок у цьому розділі зберігаються лише на цьому комп’ютері. До Owner надходить тільки обезличена технічна статистика без запитів, товарів, цін і штрихкодів.</p>
-          <p class="guide-warning"><strong>Чесне порівняння:</strong> звіт показує фактичний обсяг і час роботи Price Monitor. Економію часу визначайте порівнянням із таким самим обсягом ручної роботи.</p>
+          <p class="guide-warning"><strong>Чесне порівняння:</strong> орієнтир рахується як 15 секунд ручної роботи на товарний рядок мінус фактичний час програми. Для рішення про впровадження порівняйте його з таким самим обсягом реальної ручної роботи.</p>
         </section>
         <section id="guide-problems" data-guide-section>
           <h3>13. Якщо щось не працює</h3>
@@ -618,7 +627,7 @@
       </div>
       <form method="dialog"><button class="dialog-close" type="submit" aria-label="Закрити">×</button></form>
     </div>
-    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Такий сценарій можна зберегти як проєкт і запускати вручну або щодня у визначений час, поки програма відкрита. Плановий результат автоматично потрапляє в Excel, Windows повідомляє про завершення, а останні 30 запусків залишаються в історії проєкту. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код.<span data-demo-only hidden> «Підсумок пілоту» у Demo збирає локальну статистику роботи та формує готовий звіт для оцінки впровадження.</span></p>
+    <p class="capabilities-intro">Усі магазини підтримують пошук однієї або кількох марок, лише доступні товари, актуальну й стару ціну, Excel, аналіз знижок, списки, історію запитів, архів результатів, графік ціни товару та автоматичне порівняння. «Марка в кількох магазинах» запускає один запит у вибраних джерелах, зберігає часткові результати й формує спільний Excel. Такий сценарій можна зберегти як проєкт, масово імпортувати з Excel/CSV та запускати вручну або щодня у визначений час, поки програма відкрита. Плановий результат автоматично потрапляє в Excel, Windows повідомляє про завершення, а останні 30 запусків залишаються в історії проєкту. Архів можна шукати за запитом і датою, експортувати всі показані перевірки, повторити перевірку, порівняти дві сумісні дати або звести кілька магазинів в Excel. Кнопка «Зміни за магазинами» показує найновіші сумісні пари або зміни за вибраний період. «Штрихкод у всіх магазинах» підтверджує точний EAN/GTIN у MAKEUP і окремо показує ймовірні збіги за назвою в інших магазинах, не видаючи їх за точний код. «Цінність роботи» збирає локальну статистику та формує готовий звіт для оцінки впровадження.</p>
     <div class="capabilities-table-wrap">
       <table class="capabilities-table">
         <thead><tr><th>Магазин</th><th>Підказки марок</th><th>Варіанти</th><th>Штрихкоди</th><th>Особливості</th></tr></thead>

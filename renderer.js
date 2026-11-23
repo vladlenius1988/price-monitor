@@ -121,6 +121,8 @@ const pilotProducts = document.getElementById('pilot-products');
 const pilotDuration = document.getElementById('pilot-duration');
 const pilotBrands = document.getElementById('pilot-brands');
 const pilotExports = document.getElementById('pilot-exports');
+const pilotManualTime = document.getElementById('pilot-manual-time');
+const pilotSavedTime = document.getElementById('pilot-saved-time');
 const pilotStoreRows = document.getElementById('pilot-store-rows');
 const pilotBrandRows = document.getElementById('pilot-brand-rows');
 const pilotRecentRows = document.getElementById('pilot-recent-rows');
@@ -177,12 +179,17 @@ const monitoringProjectTime = document.getElementById('monitor-project-time');
 const monitoringProjectLoad = document.getElementById('monitor-project-load');
 const monitoringProjectSave = document.getElementById('monitor-project-save');
 const monitoringProjectRun = document.getElementById('monitor-project-run');
+const monitoringProjectImport = document.getElementById('monitor-project-import');
+const monitoringProjectTemplate = document.getElementById('monitor-project-template');
 const monitoringProjectDelete = document.getElementById('monitor-project-delete');
 const monitoringProjectStatus = document.getElementById('monitor-project-status');
 const monitoringProjectCount = document.getElementById('monitor-project-count');
 const monitoringProjectHistoryCount = document.getElementById('monitor-project-history-count');
 const monitoringProjectHistoryRows = document.getElementById('monitor-project-history-rows');
 const monitoringProjectOpenReports = document.getElementById('monitor-project-open-reports');
+const monitoringProjectImportErrors = document.getElementById('monitor-project-import-errors');
+const monitoringProjectImportErrorCount = document.getElementById('monitor-project-import-error-count');
+const monitoringProjectImportErrorList = document.getElementById('monitor-project-import-error-list');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -410,6 +417,8 @@ monitoringProjectSchedule.addEventListener('change', () => {
 monitoringProjectLoad.addEventListener('click', applySelectedMonitoringProject);
 monitoringProjectSave.addEventListener('click', saveMonitoringProject);
 monitoringProjectRun.addEventListener('click', runSelectedMonitoringProject);
+monitoringProjectImport.addEventListener('click', importMonitoringProjectFile);
+monitoringProjectTemplate.addEventListener('click', saveMonitoringProjectTemplate);
 monitoringProjectDelete.addEventListener('click', deleteMonitoringProject);
 monitoringProjectOpenReports.addEventListener('click', openMonitoringProjectReportsFolder);
 multiStoreMonitorQuery.addEventListener('keydown', (event) => {
@@ -523,7 +532,7 @@ async function initializeAppInfo() {
   const info = await parserApi?.getAppInfo?.();
   const version = String(info?.version || '').trim();
   appEdition = String(info?.edition || '').trim();
-  pilotStatisticsEnabled = appEdition === 'demo';
+  pilotStatisticsEnabled = typeof parserApi?.getPilotSummary === 'function';
   document.querySelectorAll('[data-demo-only]').forEach((element) => {
     element.hidden = !pilotStatisticsEnabled;
   });
@@ -877,7 +886,7 @@ async function loadPilotSummary() {
     pilotLoading.hidden = true;
     pilotContent.hidden = true;
     pilotEmpty.hidden = false;
-    pilotEmpty.textContent = 'Підсумок пілоту недоступний у цій збірці.';
+    pilotEmpty.textContent = 'Статистика роботи недоступна у цій збірці.';
     return;
   }
   pilotLoading.hidden = false;
@@ -924,6 +933,8 @@ function renderPilotSummary(summary) {
   pilotDuration.textContent = formatPilotDuration(totals.durationMs);
   pilotBrands.textContent = formatPilotNumber(totals.uniqueBrands);
   pilotExports.textContent = formatPilotNumber(totals.excelExports);
+  pilotManualTime.textContent = formatPilotDuration(totals.estimatedManualMs);
+  pilotSavedTime.textContent = formatPilotDuration(totals.estimatedSavedMs);
 
   pilotStoreRows.replaceChildren(...(summary.byStore || []).map((row) => createPilotRow([
     storeName(row.store),
@@ -995,12 +1006,14 @@ function pilotSummaryText(summary) {
   const totals = summary?.totals || {};
   const period = summary?.period?.days ? `останні ${summary.period.days} днів` : 'увесь період';
   const lines = [
-    `Price Monitor — підсумок пілоту (${period})`,
+    `Price Monitor — цінність роботи (${period})`,
     `Пошуків: ${formatPilotNumber(totals.searches)}`,
     `Успішність: ${formatPilotNumber(totals.successRate)}%`,
     `Торгових марок: ${formatPilotNumber(totals.uniqueBrands)}`,
     `Підготовлено товарних рядків: ${formatPilotNumber(totals.productCount)}`,
     `Час роботи програми: ${formatPilotDuration(totals.durationMs)}`,
+    `Оцінка ручної роботи: ${formatPilotDuration(totals.estimatedManualMs)}`,
+    `Орієнтовно зекономлено: ${formatPilotDuration(totals.estimatedSavedMs)}`,
     `Excel-вивантажень: ${formatPilotNumber(totals.excelExports)}`,
   ];
   for (const row of summary?.byStore || []) {
@@ -2275,6 +2288,8 @@ function renderMonitoringProjectSelection() {
   const project = selectedMonitoringProject();
   monitoringProjectLoad.disabled = !project || multiStoreState.running;
   monitoringProjectRun.disabled = !project || multiStoreState.running || isAccessBlocked();
+  monitoringProjectImport.disabled = multiStoreState.running;
+  monitoringProjectTemplate.disabled = multiStoreState.running;
   monitoringProjectDelete.disabled = !project || multiStoreState.running;
   if (!project) {
     monitoringProjectName.value = '';
@@ -2310,6 +2325,67 @@ function renderMonitoringProjectSelection() {
     project.lastOutcome === 'error' ? 'warning' : 'idle',
   );
   renderMonitoringProjectHistory(project);
+}
+
+async function importMonitoringProjectFile() {
+  if (multiStoreState.running || typeof parserApi?.importMonitoringProjects !== 'function') return;
+  monitoringProjectImport.disabled = true;
+  monitoringProjectTemplate.disabled = true;
+  setMonitoringProjectStatus('Читаю файл і перевіряю кожен рядок…', 'idle');
+  try {
+    const imported = await parserApi.importMonitoringProjects();
+    if (imported?.canceled) {
+      setMonitoringProjectStatus('Імпорт скасовано. Збережені проєкти не змінено.', 'idle');
+      return;
+    }
+    const projects = Array.isArray(imported?.projects) ? imported.projects : [];
+    const merged = monitoringProjectUtils.mergeMonitoringProjects(monitoringProjects, projects);
+    monitoringProjects = merged.projects;
+    if ((merged.added || merged.updated) && !writeMonitoringProjects()) {
+      throw new Error('Не вдалося записати імпортовані проєкти на цьому комп’ютері.');
+    }
+    renderMonitoringProjects(merged.projects.at(-1)?.id || '');
+    renderMonitoringProjectImportErrors(imported?.errors || []);
+    const parts = [
+      merged.added ? `додано ${merged.added}` : '',
+      merged.updated ? `оновлено ${merged.updated}` : '',
+      merged.skipped ? `не вмістилося ${merged.skipped}` : '',
+      imported?.errors?.length ? `потребують виправлення ${imported.errors.length}` : '',
+    ].filter(Boolean);
+    const message = parts.length ? parts.join(' · ') : 'у файлі немає придатних рядків';
+    setMonitoringProjectStatus(`${imported?.fileName || 'Файл'}: ${message}.`, imported?.errors?.length ? 'warning' : 'success');
+  } catch (error) {
+    renderMonitoringProjectImportErrors([]);
+    setMonitoringProjectStatus(batchUtils.cleanParserError(error), 'error');
+  } finally {
+    monitoringProjectImport.disabled = multiStoreState.running;
+    monitoringProjectTemplate.disabled = multiStoreState.running;
+  }
+}
+
+async function saveMonitoringProjectTemplate() {
+  if (multiStoreState.running || typeof parserApi?.saveMonitoringProjectTemplate !== 'function') return;
+  monitoringProjectTemplate.disabled = true;
+  try {
+    const filePath = await parserApi.saveMonitoringProjectTemplate();
+    setMonitoringProjectStatus(filePath ? `Шаблон збережено: ${filePath}` : 'Збереження шаблону скасовано.', filePath ? 'success' : 'idle');
+  } catch (error) {
+    setMonitoringProjectStatus(batchUtils.cleanParserError(error), 'error');
+  } finally {
+    monitoringProjectTemplate.disabled = multiStoreState.running;
+  }
+}
+
+function renderMonitoringProjectImportErrors(errors) {
+  const items = Array.isArray(errors) ? errors.slice(0, 200) : [];
+  monitoringProjectImportErrors.hidden = !items.length;
+  monitoringProjectImportErrors.open = Boolean(items.length);
+  monitoringProjectImportErrorCount.textContent = String(items.length);
+  monitoringProjectImportErrorList.replaceChildren(...items.map((item) => {
+    const row = document.createElement('li');
+    row.textContent = `Рядок ${Math.max(1, Number(item?.row) || 1)}: ${String(item?.message || 'невідома помилка')}`;
+    return row;
+  }));
 }
 
 function renderMonitoringProjectHistory(project) {

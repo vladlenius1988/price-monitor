@@ -286,6 +286,9 @@ function renderTelemetry(telemetry) {
   document.getElementById('searches-week').textContent = Number(periods.week?.total) || 0;
   document.getElementById('searches-month').textContent = Number(month.total) || 0;
   document.getElementById('search-success-rate').textContent = `${Number(month.successRate) || 0}%`;
+  document.getElementById('products-month').textContent = Number(month.productCount) || 0;
+  document.getElementById('work-time-month').textContent = formatDuration(month.totalDurationMs);
+  document.getElementById('saved-time-month').textContent = formatDuration(month.estimatedSavedMs);
 
   const stores = telemetry.byStore || [];
   document.getElementById('telemetry-stores').innerHTML = stores.length
@@ -373,7 +376,7 @@ function diagnosticCodeLabel(code) {
 }
 
 function telemetryTable(items, label) {
-  return `<table><thead><tr><th>Назва</th><th>Пошуки</th><th>Успішно</th><th>Середній час</th><th>Товарів</th><th>Останній</th></tr></thead><tbody>${items.map((item) => `<tr><td>${escapeHtml(label(item))}</td><td>${Number(item.total) || 0}</td><td class="${Number(item.successRate) >= 90 ? 'metric-success' : Number(item.total) ? 'metric-error' : ''}">${Number(item.successRate) || 0}%</td><td>${escapeHtml(formatDuration(item.averageDurationMs))}</td><td>${Number(item.productCount) || 0}</td><td>${escapeHtml(formatDateTime(item.lastSearchAt))}</td></tr>`).join('')}</tbody></table>`;
+  return `<table><thead><tr><th>Назва</th><th>Пошуки</th><th>Успішно</th><th>Середній час</th><th>Товарів</th><th>Орієнтовно зекономлено</th><th>Останній</th></tr></thead><tbody>${items.map((item) => `<tr><td>${escapeHtml(label(item))}</td><td>${Number(item.total) || 0}</td><td class="${Number(item.successRate) >= 90 ? 'metric-success' : Number(item.total) ? 'metric-error' : ''}">${Number(item.successRate) || 0}%</td><td>${escapeHtml(formatDuration(item.averageDurationMs))}</td><td>${Number(item.productCount) || 0}</td><td>${escapeHtml(formatDuration(item.estimatedSavedMs))}</td><td>${escapeHtml(formatDateTime(item.lastSearchAt))}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function telemetryErrorLabel(code) {

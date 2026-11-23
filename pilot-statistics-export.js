@@ -21,7 +21,7 @@ function buildPilotStatisticsWorkbook(summary = {}) {
 
   return [
     {
-      sheet: 'Підсумок пілоту',
+      sheet: 'Цінність роботи',
       columns: [{ width: 38 }, { width: 72 }],
       data: [
         [header('Показник'), header('Значення')],
@@ -33,13 +33,17 @@ function buildPilotStatisticsWorkbook(summary = {}) {
         ['Підготовлено товарних рядків', accent(number(totals.productCount))],
         ['Час роботи Price Monitor', duration(totals.durationMs)],
         ['Середній час одного пошуку', duration(totals.averageDurationMs)],
+        ['Оцінка ручної роботи', accent(duration(totals.estimatedManualMs))],
+        ['Орієнтовно зекономлено', accent(duration(totals.estimatedSavedMs))],
+        ['Орієнтовно зекономлено, %', `${number(totals.estimatedSavedPercent)}%`],
         ['Excel-вивантажень', accent(number(totals.excelExports))],
         ['Рядків вивантажено в Excel', number(totals.exportedRows)],
         ['Часткових пошуків', number(totals.partialSearches)],
         ['Зупинених користувачем', number(totals.cancelledSearches)],
         ['Невдалих пошуків', number(totals.failedSearches)],
         ['Приватність', summary.privacy?.noteUa || 'Марки зберігаються лише локально.'],
-        ['Важливо', 'Звіт показує фактичний обсяг роботи програми. Економію часу слід порівнювати з тим самим обсягом ручного процесу.'],
+        ['Метод оцінки', summary.estimate?.noteUa || '15 секунд ручної роботи на товарний рядок мінус фактичний час програми.'],
+        ['Важливо', 'Оцінка економії часу є орієнтиром. Для пілоту її слід порівнювати з тим самим обсягом реального ручного процесу.'],
       ],
       stickyRowsCount: 1,
     },

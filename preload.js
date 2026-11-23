@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('priceParser', {
   exportCrossStoreBarcode: (payload) => ipcRenderer.invoke('products:export-cross-store-barcode', payload),
   exportMultiStoreLive: (payload) => ipcRenderer.invoke('products:export-multi-store-live', payload),
   autoExportMonitoringProject: (payload) => ipcRenderer.invoke('projects:auto-export-multi-store-live', payload),
+  importMonitoringProjects: () => ipcRenderer.invoke('projects:import'),
+  saveMonitoringProjectTemplate: () => ipcRenderer.invoke('projects:save-template'),
   openScheduledReportsFolder: () => ipcRenderer.invoke('projects:open-reports-folder'),
   notifyMonitoringProject: (payload) => ipcRenderer.invoke('projects:notify', payload),
   exportSavedLists: (payload) => ipcRenderer.invoke('saved-lists:export', payload),

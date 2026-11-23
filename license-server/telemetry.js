@@ -1,5 +1,6 @@
 const STORE_IDS = Object.freeze(['eva', 'varus', 'makeup', 'aurora', 'notino', 'rozetka']);
 const OUTCOMES = Object.freeze(['success', 'error', 'cancelled']);
+const ESTIMATED_MANUAL_MS_PER_ROW = 15_000;
 const SENSITIVE_FIELDS = Object.freeze([
   'query', 'queries', 'brand', 'brands', 'product', 'products', 'price', 'prices',
   'barcode', 'barcodes', 'ean', 'gtin',
@@ -59,18 +60,28 @@ function safeErrorCode(value) {
 function telemetrySummary(row = {}) {
   const total = Number(row.total) || 0;
   const success = Number(row.success) || 0;
+  const averageDurationMs = Math.round(Number(row.average_duration_ms) || 0);
+  const totalDurationMs = Math.round(Number(row.total_duration_ms) || averageDurationMs * total);
+  const productCount = Number(row.product_count) || 0;
+  const estimatedManualMs = productCount * ESTIMATED_MANUAL_MS_PER_ROW;
+  const estimatedSavedMs = Math.max(0, estimatedManualMs - totalDurationMs);
   return {
     total,
     success,
     error: Number(row.error ?? row.error_count) || 0,
     cancelled: Number(row.cancelled) || 0,
     successRate: total ? Math.round((success / total) * 1000) / 10 : 0,
-    averageDurationMs: Math.round(Number(row.average_duration_ms) || 0),
-    productCount: Number(row.product_count) || 0,
+    averageDurationMs,
+    totalDurationMs,
+    productCount,
+    estimatedManualMs,
+    estimatedSavedMs,
+    estimatedSavedPercent: estimatedManualMs ? Math.round(estimatedSavedMs * 1000 / estimatedManualMs) / 10 : 0,
   };
 }
 
 module.exports = {
+  ESTIMATED_MANUAL_MS_PER_ROW,
   STORE_IDS,
   OUTCOMES,
   normalizeSearchTelemetry,

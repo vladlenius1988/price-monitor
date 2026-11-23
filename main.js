@@ -6,6 +6,8 @@ const { randomUUID, createHash } = require('crypto');
 const packageInfo = require('./package.json');
 const writeExcelFileModule = require('write-excel-file/node');
 const writeExcelFile = writeExcelFileModule.default || writeExcelFileModule;
+const readExcelFileModule = require('read-excel-file/node');
+const readExcelFile = readExcelFileModule.default || readExcelFileModule;
 const { PriceScraper, STORES } = require('./scraper');
 const { ComparisonStore } = require('./comparison-store');
 const { productDiscount } = require('./result-view');
@@ -19,6 +21,7 @@ const { buildMultiStoreLiveWorkbook } = require('./multi-store-live-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
+const { parseDelimitedText, parseMonitoringProjectRows, spreadsheetRows } = require('./monitoring-project-import');
 
 const requestedEdition = String(process.env.PRICE_MONITOR_EDITION || packageInfo.priceMonitorEdition || 'full');
 const APP_EDITION = ['demo', 'licensed'].includes(requestedEdition) ? requestedEdition : 'full';
@@ -50,8 +53,8 @@ const editionSettings = {
   appId: String(packageInfo.priceMonitorAppId || editionDefaults.appId),
   userDataName: String(packageInfo.priceMonitorUserDataName || editionDefaults.userDataName),
 };
-const pilotStatisticsModule = APP_EDITION === 'demo' ? require('./pilot-statistics') : null;
-const pilotStatisticsExportModule = APP_EDITION === 'demo' ? require('./pilot-statistics-export') : null;
+const pilotStatisticsModule = require('./pilot-statistics');
+const pilotStatisticsExportModule = require('./pilot-statistics-export');
 
 if (APP_EDITION !== 'full' && typeof app.setPath === 'function' && typeof app.getPath === 'function') {
   const testDataArgument = process.argv.includes('--test-hidden')
@@ -265,13 +268,13 @@ function registerIpcHandlers() {
     return pilotStatisticsStore.summary(period);
   });
   ipcMain.handle('pilot:export', async (_event, period = {}) => {
-    if (!pilotStatisticsStore) throw new Error('Статистика пілоту ще не готова.');
+    if (!pilotStatisticsStore) throw new Error('Статистика роботи ще не готова.');
     const summary = await pilotStatisticsStore.summary(period);
     if (!summary?.totals?.searches) throw new Error('Ще немає завершених пошуків для звіту.');
     const sheets = pilotStatisticsExportModule.buildPilotStatisticsWorkbook(summary);
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: 'Зберегти підсумок пілоту',
-      defaultPath: `Price-Monitor-підсумок-пілоту-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      title: 'Зберегти підсумок роботи',
+      defaultPath: `Price-Monitor-підсумок-роботи-${new Date().toISOString().slice(0, 10)}.xlsx`,
       filters: [{ name: 'Excel', extensions: ['xlsx'] }],
     });
     if (result.canceled || !result.filePath) return null;
@@ -813,6 +816,40 @@ function registerIpcHandlers() {
     return { filePath, fileName: path.basename(filePath) };
   });
 
+  ipcMain.handle('projects:import', async () => {
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      title: 'Імпортувати проєкти моніторингу',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Excel або CSV', extensions: ['xlsx', 'csv'] },
+        { name: 'Excel', extensions: ['xlsx'] },
+        { name: 'CSV', extensions: ['csv'] },
+      ],
+    });
+    if (selected.canceled || !selected.filePaths[0]) return { canceled: true };
+    const filePath = selected.filePaths[0];
+    const file = await fs.promises.stat(filePath);
+    if (file.size > 5 * 1024 * 1024) throw new Error('Файл завеликий. Максимальний розмір — 5 МБ.');
+    const extension = path.extname(filePath).toLowerCase();
+    let rows;
+    if (extension === '.xlsx') rows = spreadsheetRows(await readExcelFile(filePath));
+    else if (extension === '.csv') rows = parseDelimitedText(await fs.promises.readFile(filePath, 'utf8'));
+    else throw new Error('Підтримуються лише файли XLSX і CSV.');
+    return { canceled: false, fileName: path.basename(filePath), ...parseMonitoringProjectRows(rows) };
+  });
+
+  ipcMain.handle('projects:save-template', async () => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Зберегти шаблон проєктів моніторингу',
+      defaultPath: 'Price-Monitor-шаблон-проєктів.xlsx',
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const buffer = await writeExcelFile(buildMonitoringProjectTemplate()).toBuffer();
+    await fs.promises.writeFile(result.filePath, buffer);
+    return result.filePath;
+  });
+
   ipcMain.handle('projects:open-reports-folder', async () => {
     const directory = scheduledReportsDirectory();
     await fs.promises.mkdir(directory, { recursive: true });
@@ -840,6 +877,39 @@ function registerIpcHandlers() {
     }).show();
     return true;
   });
+}
+
+function buildMonitoringProjectTemplate() {
+  const header = (value) => ({
+    value, fontWeight: 'bold', textColor: '#FFFFFF', backgroundColor: '#112A46', alignVertical: 'center',
+  });
+  return [
+    {
+      sheet: 'Проєкти',
+      columns: [34, 48, 38, 18, 18, 14].map((width) => ({ width })),
+      data: [
+        ['Назва проєкту', 'Торгові марки', 'Магазини', 'Режим', 'Запуск', 'Час'].map(header),
+        ['Щоденний догляд', 'Nivea, Dove', 'EVA, MAKEUP, Notino', 'Детально', 'Щодня', '09:00'],
+        ['Декоративна косметика', 'Lamel, Maybelline', 'EVA, MAKEUP, Rozetka', 'Швидко', 'Вручну', ''],
+      ],
+      stickyRowsCount: 1,
+    },
+    {
+      sheet: 'Пояснення',
+      columns: [{ width: 28 }, { width: 92 }],
+      data: [
+        [header('Колонка'), header('Як заповнювати')],
+        ['Назва проєкту', 'Обов’язково. Унікальна зрозуміла назва. Якщо така назва вже є у Price Monitor, її налаштування буде оновлено.'],
+        ['Торгові марки', 'Обов’язково. Одна або кілька марок через кому.'],
+        ['Магазини', 'Обов’язково щонайменше два: EVA, VARUS, MAKEUP, Аврора, Notino, Rozetka.'],
+        ['Режим', 'Швидко або Детально. Порожнє значення означає швидкий режим.'],
+        ['Запуск', 'Вручну або Щодня. Порожнє значення означає ручний запуск.'],
+        ['Час', 'Для щоденного запуску у форматі ГГ:ХХ, наприклад 09:00.'],
+        ['Ліміт', 'За один імпорт обробляється та зберігається до 200 заповнених рядків.'],
+      ],
+      stickyRowsCount: 1,
+    },
+  ];
 }
 
 function numberOrBlank(value) {
@@ -920,9 +990,7 @@ if (!hasSingleInstanceLock) {
     comparisonStore = new ComparisonStore(path.join(app.getPath('userData'), 'price-comparisons.json'));
     archiveStore = new ArchiveStore(path.join(app.getPath('userData'), 'monitoring-archive.json'));
     diagnosticStore = new DiagnosticEventStore(path.join(app.getPath('userData'), 'diagnostic-events.json'));
-    if (APP_EDITION === 'demo') {
-      pilotStatisticsStore = new pilotStatisticsModule.PilotStatisticsStore(path.join(app.getPath('userData'), 'pilot-statistics.json'));
-    }
+    pilotStatisticsStore = new pilotStatisticsModule.PilotStatisticsStore(path.join(app.getPath('userData'), 'pilot-statistics.json'));
     registerIpcHandlers();
     createMainWindow();
     const liveIntervalMs = Number(packageInfo.priceMonitorLiveLicenseIntervalMs) || 0;

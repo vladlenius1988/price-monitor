@@ -41,6 +41,7 @@ test('calculates stable aggregate values for the owner dashboard', () => {
     error_count: 1,
     cancelled: 1,
     average_duration_ms: 1250.6,
+    total_duration_ms: 10005,
     product_count: 410,
   }), {
     total: 8,
@@ -49,6 +50,10 @@ test('calculates stable aggregate values for the owner dashboard', () => {
     cancelled: 1,
     successRate: 75,
     averageDurationMs: 1251,
+    totalDurationMs: 10005,
     productCount: 410,
+    estimatedManualMs: 6150000,
+    estimatedSavedMs: 6139995,
+    estimatedSavedPercent: 99.8,
   });
 });

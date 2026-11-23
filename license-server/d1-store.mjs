@@ -328,6 +328,7 @@ export class D1LicenseStore {
           SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
           SUM(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
           AVG(duration_ms) AS average_duration_ms,
+          SUM(duration_ms) AS total_duration_ms,
           SUM(product_count) AS product_count,
           MAX(occurred_at) AS last_search_at
         FROM search_metrics WHERE occurred_at >= ?1
@@ -339,6 +340,7 @@ export class D1LicenseStore {
           SUM(CASE WHEN metrics.outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
           SUM(CASE WHEN metrics.outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
           AVG(metrics.duration_ms) AS average_duration_ms,
+          SUM(metrics.duration_ms) AS total_duration_ms,
           SUM(metrics.product_count) AS product_count,
           MAX(metrics.occurred_at) AS last_search_at
         FROM search_metrics AS metrics
@@ -373,6 +375,7 @@ export class D1LicenseStore {
         SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS error_count,
         SUM(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
         AVG(duration_ms) AS average_duration_ms,
+        SUM(duration_ms) AS total_duration_ms,
         SUM(product_count) AS product_count
       FROM search_metrics WHERE occurred_at >= ?1
     `).bind(since).first();

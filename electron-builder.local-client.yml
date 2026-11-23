@@ -23,10 +23,13 @@ files:
   - cross-store-barcode-export.js
   - multi-store-search.js
   - monitoring-projects.js
+  - monitoring-project-import.js
   - multi-store-live-export.js
   - demo-access.js
   - license-access.js
   - diagnostic-report.js
+  - pilot-statistics.js
+  - pilot-statistics-export.js
   - device-identity.js
   - license-public.pem
   - renderer.js

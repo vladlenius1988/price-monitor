@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { PilotStatisticsStore, buildPilotSummary, normalizePilotEvent } = require('./pilot-statistics');
+const { ESTIMATED_MANUAL_MS_PER_ROW, PilotStatisticsStore, buildPilotSummary, normalizePilotEvent } = require('./pilot-statistics');
 const { buildPilotStatisticsWorkbook } = require('./pilot-statistics-export');
 
 test('pilot event keeps local brand data but drops product and price payloads', () => {
@@ -34,6 +34,10 @@ test('pilot summary aggregates searches, brands, stores and exports', () => {
   assert.equal(summary.totals.productCount, 140);
   assert.equal(summary.totals.excelExports, 1);
   assert.equal(summary.totals.uniqueBrands, 3);
+  assert.equal(summary.totals.estimatedManualMs, 140 * ESTIMATED_MANUAL_MS_PER_ROW);
+  assert.equal(summary.totals.estimatedSavedMs, 1_890_000);
+  assert.equal(summary.totals.estimatedSavedPercent, 90);
+  assert.equal(summary.estimate.manualMsPerProductRow, 15_000);
   assert.equal(summary.byBrand.find((row) => row.brand === 'Nivea').productCount, 125);
   assert.equal(summary.byStore.find((row) => row.store === 'makeup').excelExports, 1);
 });
@@ -51,6 +55,6 @@ test('pilot store survives restart and workbook contains four readable sheets', 
   assert.equal(summary.totals.excelExports, 1);
   assert.match(fs.readFileSync(filePath, 'utf8'), /Xiaomi/);
   const sheets = buildPilotStatisticsWorkbook(summary);
-  assert.deepEqual(sheets.map((sheet) => sheet.sheet), ['Підсумок пілоту', 'За магазинами', 'За торговими марками', 'Останні пошуки']);
+  assert.deepEqual(sheets.map((sheet) => sheet.sheet), ['Цінність роботи', 'За магазинами', 'За торговими марками', 'Останні пошуки']);
   assert.ok(sheets.every((sheet) => Array.isArray(sheet.data) && sheet.data.length >= 2));
 });
