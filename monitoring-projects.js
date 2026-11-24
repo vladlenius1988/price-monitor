@@ -107,7 +107,7 @@
       const run = {
         startedAt: validIso(result.startedAt) || project.lastStartedAt || completedAt,
         completedAt,
-        trigger: result.trigger === 'scheduled' ? 'scheduled' : 'manual',
+        trigger: normalizeTrigger(result.trigger),
         outcome,
         productCount,
         reportFileName: cleanFileName(result.reportFileName),
@@ -182,6 +182,10 @@
     return ['running', 'success', 'partial', 'cancelled', 'error'].includes(outcome) ? outcome : '';
   }
 
+  function normalizeTrigger(value) {
+    return ['scheduled', 'queue'].includes(value) ? value : 'manual';
+  }
+
   function normalizeRunHistory(value) {
     if (!Array.isArray(value)) return [];
     return value.slice(0, MAX_RUN_HISTORY).map((run) => {
@@ -191,7 +195,7 @@
       return {
         startedAt: validIso(run?.startedAt) || completedAt,
         completedAt,
-        trigger: run?.trigger === 'scheduled' ? 'scheduled' : 'manual',
+        trigger: normalizeTrigger(run?.trigger),
         outcome,
         productCount: Math.max(0, Math.floor(Number(run?.productCount) || 0)),
         reportFileName: cleanFileName(run?.reportFileName),

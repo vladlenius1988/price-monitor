@@ -1128,7 +1128,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.37.0');
+  assert.equal(packageJson.version, '4.38.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1141,6 +1141,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(packageJson.build.files.includes('cross-store-barcode.js'));
   assert.ok(packageJson.build.files.includes('cross-store-barcode-export.js'));
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
+  assert.ok(packageJson.build.files.includes('monitoring-project-queue.js'));
   assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
   assert.deepEqual(packageJson.build.win.target, ['nsis']);
 });
@@ -1157,16 +1158,23 @@ test('runs selected stores together, retries failures and exports one workbook',
   ];
   assert.ok(html.indexOf('<script src="multi-store-search.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
   assert.ok(html.indexOf('<script src="monitoring-projects.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
+  assert.ok(html.indexOf('<script src="monitoring-project-queue.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
   assert.match(html, /id="show-multi-store-monitor"/);
   assert.match(html, /id="multi-store-monitor-store-picker"/);
   assert.match(html, /id="multi-store-monitor-retry"/);
   assert.match(html, /id="monitor-project-select"/);
   assert.match(html, /id="monitor-project-schedule"/);
+  assert.match(html, /id="monitor-queue-start"/);
+  assert.match(html, /id="monitor-queue-stop"/);
+  assert.match(html, /id="monitor-queue-retry-errors"/);
   assert.match(html, /id="barcode-monitor-store-picker"/);
   assert.match(html, /id="barcode-monitor-retry"/);
   assert.match(renderer, /async function runMultiStoreSearch/);
   assert.match(renderer, /failedStoreIds\(multiStoreState\.reports\)/);
   assert.match(renderer, /validateMultiStoreDemoCalls/);
+  assert.match(renderer, /async function startMonitoringProjectQueue/);
+  assert.match(renderer, /async function stopMonitoringProjectQueue/);
+  assert.match(renderer, /async function retryMonitoringProjectQueueErrors/);
   assert.match(renderer, /async function retryCrossStoreBarcodeErrors/);
   assert.match(preload, /exportMultiStoreLive: \(payload\) => ipcRenderer\.invoke\('products:export-multi-store-live'/);
   assert.match(preload, /autoExportMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:auto-export-multi-store-live'/);
@@ -1182,12 +1190,14 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(main, /ipcMain\.handle\('projects:save-template'/);
   assert.ok(packageJson.build.files.includes('multi-store-search.js'));
   assert.ok(packageJson.build.files.includes('monitoring-projects.js'));
+  assert.ok(packageJson.build.files.includes('monitoring-project-queue.js'));
   assert.ok(packageJson.build.files.includes('monitoring-project-import.js'));
   assert.ok(packageJson.build.files.includes('multi-store-live-export.js'));
   for (const configName of clientConfigs) {
     const config = fs.readFileSync(path.join(__dirname, configName), 'utf8');
     assert.match(config, /- multi-store-search\.js/, configName);
     assert.match(config, /- monitoring-projects\.js/, configName);
+    assert.match(config, /- monitoring-project-queue\.js/, configName);
     assert.match(config, /- monitoring-project-import\.js/, configName);
     assert.match(config, /- multi-store-live-export\.js/, configName);
   }

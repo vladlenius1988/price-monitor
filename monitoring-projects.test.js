@@ -70,6 +70,14 @@ test('run result is stored for a clear project summary', () => {
   assert.equal(finished[0].runHistory[0].reportFileName, 'price_monitor_multi_nivea_2026-11-20.xlsx');
 });
 
+test('batch queue is retained as a separate run trigger', () => {
+  const finished = markMonitoringProjectFinished([project()], 'morning', {
+    completedAt: new Date(2026, 10, 20, 9, 20, 0), outcome: 'success', productCount: 42,
+    trigger: 'queue', reportFileName: 'morning.xlsx',
+  });
+  assert.equal(finished[0].runHistory[0].trigger, 'queue');
+});
+
 test('run history stays bounded and rejects unsafe report file names', () => {
   let projects = [project()];
   for (let index = 0; index < 35; index += 1) {

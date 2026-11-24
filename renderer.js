@@ -190,6 +190,15 @@ const monitoringProjectOpenReports = document.getElementById('monitor-project-op
 const monitoringProjectImportErrors = document.getElementById('monitor-project-import-errors');
 const monitoringProjectImportErrorCount = document.getElementById('monitor-project-import-error-count');
 const monitoringProjectImportErrorList = document.getElementById('monitor-project-import-error-list');
+const monitoringQueueCount = document.getElementById('monitor-queue-count');
+const monitoringQueueSelectAll = document.getElementById('monitor-queue-select-all');
+const monitoringQueueClear = document.getElementById('monitor-queue-clear');
+const monitoringQueueStart = document.getElementById('monitor-queue-start');
+const monitoringQueueStop = document.getElementById('monitor-queue-stop');
+const monitoringQueueRetryErrors = document.getElementById('monitor-queue-retry-errors');
+const monitoringQueueProgress = document.getElementById('monitor-queue-progress');
+const monitoringQueueStatus = document.getElementById('monitor-queue-status');
+const monitoringQueueList = document.getElementById('monitor-queue-list');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -249,6 +258,7 @@ const archiveTools = window.priceMonitorArchiveTools;
 const crossStoreBarcodeUtils = window.priceMonitorCrossStoreBarcode;
 const multiStoreSearchUtils = window.priceMonitorMultiStoreSearch;
 const monitoringProjectUtils = window.priceMonitorMonitoringProjects;
+const monitoringQueueUtils = window.priceMonitorMonitoringProjectQueue;
 const parserAvailable = Boolean(parserApi?.parseBrand && parserApi?.exportExcel && batchUtils?.runBrandBatch);
 const savedListsAvailable = Boolean(savedListUtils?.parseSavedLists && savedListUtils?.upsertSavedList);
 const searchHistoryAvailable = Boolean(searchHistoryUtils?.parseSearchHistory && searchHistoryUtils?.addSearchHistory);
@@ -309,6 +319,9 @@ const multiStoreState = {
 
 let monitoringProjectTimer = null;
 let scheduledProjectRunning = false;
+let monitoringQueueRunning = false;
+let monitoringProjectQueue = monitoringQueueUtils?.createMonitoringProjectQueue([], []) || null;
+const monitoringQueueSelectedIds = new Set();
 
 storeButtons.forEach((button) => {
   button.addEventListener('click', () => selectStore(button.dataset.store));
@@ -364,7 +377,7 @@ activationCodeInput.addEventListener('keydown', (event) => {
 cancelButton.addEventListener('click', async () => {
   if (!parserAvailable) return showLaunchHint();
   if (crossBarcodeState.running) return cancelCrossStoreBarcodeSearch();
-  if (multiStoreState.running) return cancelMultiStoreSearch();
+  if (multiStoreState.running) return monitoringQueueRunning ? stopMonitoringProjectQueue() : cancelMultiStoreSearch();
   state.cancelRequested = true;
   cancelButton.disabled = true;
   setStatus('Зупиняю пошук…', 'loading');
@@ -405,7 +418,7 @@ barcodeMonitorDialog.addEventListener('cancel', (event) => {
 });
 showMultiStoreMonitorButton.addEventListener('click', openMultiStoreMonitor);
 multiStoreMonitorStart.addEventListener('click', startMultiStoreSearch);
-multiStoreMonitorCancel.addEventListener('click', cancelMultiStoreSearch);
+multiStoreMonitorCancel.addEventListener('click', () => (monitoringQueueRunning ? stopMonitoringProjectQueue() : cancelMultiStoreSearch()));
 multiStoreMonitorRetry.addEventListener('click', retryMultiStoreErrors);
 multiStoreMonitorExport.addEventListener('click', exportMultiStoreResults);
 multiStoreMonitorMode.addEventListener('change', saveMultiStorePreferences);
@@ -421,6 +434,12 @@ monitoringProjectImport.addEventListener('click', importMonitoringProjectFile);
 monitoringProjectTemplate.addEventListener('click', saveMonitoringProjectTemplate);
 monitoringProjectDelete.addEventListener('click', deleteMonitoringProject);
 monitoringProjectOpenReports.addEventListener('click', openMonitoringProjectReportsFolder);
+monitoringQueueSelectAll.addEventListener('click', selectAllMonitoringProjectsForQueue);
+monitoringQueueClear.addEventListener('click', clearMonitoringProjectQueueSelection);
+monitoringQueueStart.addEventListener('click', () => startMonitoringProjectQueue([...monitoringQueueSelectedIds]));
+monitoringQueueStop.addEventListener('click', stopMonitoringProjectQueue);
+monitoringQueueRetryErrors.addEventListener('click', retryMonitoringProjectQueueErrors);
+monitoringQueueList.addEventListener('change', updateMonitoringProjectQueueSelection);
 multiStoreMonitorQuery.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -428,7 +447,7 @@ multiStoreMonitorQuery.addEventListener('keydown', (event) => {
   }
 });
 multiStoreMonitorDialog.addEventListener('cancel', (event) => {
-  if (multiStoreState.running) event.preventDefault();
+  if (multiStoreState.running || monitoringQueueRunning) event.preventDefault();
 });
 saveDiagnosticsButton.addEventListener('click', exportDiagnostics);
 sendDiagnosticsButton.addEventListener('click', sendDiagnostics);
@@ -2275,6 +2294,10 @@ function writeMonitoringProjects() {
 
 function renderMonitoringProjects(selectedId = monitoringProjectSelect.value) {
   if (!monitoringProjectUtils) return;
+  const availableIds = new Set(monitoringProjects.map((project) => project.id));
+  for (const projectId of monitoringQueueSelectedIds) {
+    if (!availableIds.has(projectId)) monitoringQueueSelectedIds.delete(projectId);
+  }
   monitoringProjectSelect.replaceChildren(
     optionElement('', 'Новий проєкт'),
     ...monitoringProjects.map((project) => optionElement(project.id, project.name)),
@@ -2282,15 +2305,17 @@ function renderMonitoringProjects(selectedId = monitoringProjectSelect.value) {
   monitoringProjectSelect.value = monitoringProjects.some((project) => project.id === selectedId) ? selectedId : '';
   monitoringProjectCount.textContent = `${monitoringProjects.length} ${ukPlural(monitoringProjects.length, 'проєкт', 'проєкти', 'проєктів')}`;
   renderMonitoringProjectSelection();
+  renderMonitoringProjectQueue();
 }
 
 function renderMonitoringProjectSelection() {
   const project = selectedMonitoringProject();
-  monitoringProjectLoad.disabled = !project || multiStoreState.running;
-  monitoringProjectRun.disabled = !project || multiStoreState.running || isAccessBlocked();
-  monitoringProjectImport.disabled = multiStoreState.running;
-  monitoringProjectTemplate.disabled = multiStoreState.running;
-  monitoringProjectDelete.disabled = !project || multiStoreState.running;
+  const busy = multiStoreState.running || monitoringQueueRunning;
+  monitoringProjectLoad.disabled = !project || busy;
+  monitoringProjectRun.disabled = !project || busy || isAccessBlocked();
+  monitoringProjectImport.disabled = busy;
+  monitoringProjectTemplate.disabled = busy;
+  monitoringProjectDelete.disabled = !project || busy;
   if (!project) {
     monitoringProjectName.value = '';
     monitoringProjectSchedule.value = 'manual';
@@ -2327,8 +2352,164 @@ function renderMonitoringProjectSelection() {
   renderMonitoringProjectHistory(project);
 }
 
+function renderMonitoringProjectQueue() {
+  if (!monitoringQueueUtils) return;
+  const queue = monitoringQueueUtils.normalizeQueue(monitoringProjectQueue);
+  const summary = monitoringQueueUtils.queueSummary(queue);
+  const queueItems = new Map(queue.items.map((item) => [item.projectId, item]));
+  const finished = summary.total - summary.pending - summary.running;
+  const selectedCount = monitoringQueueSelectedIds.size;
+  monitoringQueueCount.textContent = monitoringQueueRunning
+    ? `${finished}/${summary.total} готово`
+    : `${selectedCount} ${ukPlural(selectedCount, 'вибрано', 'вибрано', 'вибрано')}`;
+  monitoringQueueProgress.max = Math.max(1, summary.total);
+  monitoringQueueProgress.value = Math.max(0, finished);
+  monitoringQueueSelectAll.disabled = monitoringQueueRunning || !monitoringProjects.length;
+  monitoringQueueClear.disabled = monitoringQueueRunning || !selectedCount;
+  monitoringQueueStart.disabled = monitoringQueueRunning || state.parsing || !selectedCount || isAccessBlocked();
+  monitoringQueueStop.hidden = !monitoringQueueRunning;
+  monitoringQueueStop.disabled = queue.status === 'stopping';
+  const failedIds = monitoringQueueUtils.failedQueueProjectIds(queue);
+  monitoringQueueRetryErrors.hidden = monitoringQueueRunning || !failedIds.length;
+  monitoringQueueRetryErrors.disabled = monitoringQueueRunning || isAccessBlocked();
+
+  if (!monitoringProjects.length) {
+    const empty = document.createElement('p');
+    empty.className = 'monitor-project-history-empty';
+    empty.textContent = 'Спочатку створіть або імпортуйте проєкти моніторингу.';
+    monitoringQueueList.replaceChildren(empty);
+    return;
+  }
+
+  const statusLabels = {
+    pending: 'Очікує', running: 'Виконується', success: 'Готово', partial: 'Частково',
+    cancelled: 'Зупинено', error: 'Помилка',
+  };
+  monitoringQueueList.replaceChildren(...monitoringProjects.map((project) => {
+    const item = queueItems.get(project.id);
+    const row = document.createElement('div');
+    row.className = 'monitor-project-queue-row';
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.projectId = project.id;
+    checkbox.checked = monitoringQueueSelectedIds.has(project.id);
+    checkbox.disabled = monitoringQueueRunning;
+    const name = document.createElement('span');
+    name.textContent = project.name;
+    label.append(checkbox, name);
+    const status = document.createElement('span');
+    status.className = item ? `is-${item.status}` : '';
+    status.textContent = item ? statusLabels[item.status] || item.status : 'Не запускався';
+    const detail = document.createElement('small');
+    detail.title = item?.reportFileName || '';
+    detail.textContent = item
+      ? item.reportFileName || (item.productCount ? `${item.productCount} рядків` : 'Без Excel')
+      : project.stores.map(storeName).join(', ');
+    row.append(label, status, detail);
+    return row;
+  }));
+}
+
+function selectAllMonitoringProjectsForQueue() {
+  if (monitoringQueueRunning) return;
+  monitoringProjects.forEach((project) => monitoringQueueSelectedIds.add(project.id));
+  setMonitoringQueueStatus(`Вибрано всі проєкти: ${monitoringQueueSelectedIds.size}.`, 'idle');
+  renderMonitoringProjectQueue();
+}
+
+function clearMonitoringProjectQueueSelection() {
+  if (monitoringQueueRunning) return;
+  monitoringQueueSelectedIds.clear();
+  setMonitoringQueueStatus('Вибір знято.', 'idle');
+  renderMonitoringProjectQueue();
+}
+
+function updateMonitoringProjectQueueSelection(event) {
+  const checkbox = event.target.closest('input[data-project-id]');
+  if (!checkbox || monitoringQueueRunning) return;
+  if (checkbox.checked) monitoringQueueSelectedIds.add(checkbox.dataset.projectId);
+  else monitoringQueueSelectedIds.delete(checkbox.dataset.projectId);
+  setMonitoringQueueStatus(
+    monitoringQueueSelectedIds.size ? `Вибрано проєктів: ${monitoringQueueSelectedIds.size}.` : 'Оберіть проєкти у списку нижче.',
+    'idle',
+  );
+  renderMonitoringProjectQueue();
+}
+
+async function startMonitoringProjectQueue(projectIds) {
+  if (!monitoringQueueUtils || monitoringQueueRunning || state.parsing || isAccessBlocked()) return;
+  const queue = monitoringQueueUtils.createMonitoringProjectQueue(monitoringProjects, projectIds);
+  if (!queue.items.length) {
+    setMonitoringQueueStatus('Оберіть хоча б один проєкт.', 'error');
+    return;
+  }
+  monitoringProjectQueue = monitoringQueueUtils.startMonitoringProjectQueue(queue);
+  monitoringQueueRunning = true;
+  setMonitoringQueueStatus(`Черга запущена: ${queue.items.length} ${ukPlural(queue.items.length, 'проєкт', 'проєкти', 'проєктів')}.`, 'success');
+  renderMonitoringProjectQueue();
+  renderMonitoringProjectSelection();
+
+  try {
+    for (const queueItem of monitoringProjectQueue.items) {
+      if (monitoringProjectQueue.stopRequested) break;
+      const project = monitoringProjects.find((candidate) => candidate.id === queueItem.projectId);
+      monitoringProjectQueue = monitoringQueueUtils.markQueueItemRunning(monitoringProjectQueue, queueItem.projectId);
+      setMonitoringQueueStatus(`Виконується «${queueItem.name}»…`, 'idle');
+      renderMonitoringProjectQueue();
+      let result = { outcome: 'error', productCount: 0, reportFileName: '' };
+      if (project) {
+        try {
+          result = await runMonitoringProject(project, { scheduled: false, queue: true }) || result;
+        } catch (_error) {
+          result = { outcome: 'error', productCount: 0, reportFileName: '' };
+        }
+      }
+      monitoringProjectQueue = monitoringQueueUtils.finishQueueItem(monitoringProjectQueue, queueItem.projectId, result);
+      renderMonitoringProjectQueue();
+      if (isAccessBlocked()) monitoringProjectQueue = monitoringQueueUtils.requestMonitoringProjectQueueStop(monitoringProjectQueue);
+    }
+  } finally {
+    monitoringProjectQueue = monitoringQueueUtils.finishMonitoringProjectQueue(monitoringProjectQueue);
+    monitoringQueueRunning = false;
+    const summary = monitoringQueueUtils.queueSummary(monitoringProjectQueue);
+    const stopped = monitoringProjectQueue.status === 'stopped';
+    const detail = [
+      `${summary.completed} завершено`,
+      summary.failed ? `${summary.failed} з помилкою` : '',
+      summary.cancelled ? `${summary.cancelled} зупинено` : '',
+      `${summary.reportCount} Excel`,
+    ].filter(Boolean).join(' · ');
+    setMonitoringQueueStatus(`${stopped ? 'Чергу зупинено' : 'Чергу завершено'}: ${detail}.`, summary.failed || stopped ? 'warning' : 'success');
+    renderMonitoringProjectQueue();
+    renderMonitoringProjectSelection();
+  }
+}
+
+async function stopMonitoringProjectQueue() {
+  if (!monitoringQueueRunning || !monitoringQueueUtils) return;
+  monitoringProjectQueue = monitoringQueueUtils.requestMonitoringProjectQueueStop(monitoringProjectQueue);
+  setMonitoringQueueStatus('Зупиняю поточний проєкт. Уже готові Excel та історія залишаться.', 'warning');
+  renderMonitoringProjectQueue();
+  if (multiStoreState.running) await cancelMultiStoreSearch();
+}
+
+async function retryMonitoringProjectQueueErrors() {
+  if (monitoringQueueRunning || !monitoringQueueUtils) return;
+  const failedIds = monitoringQueueUtils.failedQueueProjectIds(monitoringProjectQueue);
+  if (!failedIds.length) return;
+  monitoringQueueSelectedIds.clear();
+  failedIds.forEach((projectId) => monitoringQueueSelectedIds.add(projectId));
+  await startMonitoringProjectQueue(failedIds);
+}
+
+function setMonitoringQueueStatus(message, type = 'idle') {
+  monitoringQueueStatus.textContent = message;
+  monitoringQueueStatus.dataset.type = type;
+}
+
 async function importMonitoringProjectFile() {
-  if (multiStoreState.running || typeof parserApi?.importMonitoringProjects !== 'function') return;
+  if (multiStoreState.running || monitoringQueueRunning || typeof parserApi?.importMonitoringProjects !== 'function') return;
   monitoringProjectImport.disabled = true;
   monitoringProjectTemplate.disabled = true;
   setMonitoringProjectStatus('Читаю файл і перевіряю кожен рядок…', 'idle');
@@ -2358,13 +2539,13 @@ async function importMonitoringProjectFile() {
     renderMonitoringProjectImportErrors([]);
     setMonitoringProjectStatus(batchUtils.cleanParserError(error), 'error');
   } finally {
-    monitoringProjectImport.disabled = multiStoreState.running;
-    monitoringProjectTemplate.disabled = multiStoreState.running;
+    monitoringProjectImport.disabled = multiStoreState.running || monitoringQueueRunning;
+    monitoringProjectTemplate.disabled = multiStoreState.running || monitoringQueueRunning;
   }
 }
 
 async function saveMonitoringProjectTemplate() {
-  if (multiStoreState.running || typeof parserApi?.saveMonitoringProjectTemplate !== 'function') return;
+  if (multiStoreState.running || monitoringQueueRunning || typeof parserApi?.saveMonitoringProjectTemplate !== 'function') return;
   monitoringProjectTemplate.disabled = true;
   try {
     const filePath = await parserApi.saveMonitoringProjectTemplate();
@@ -2372,7 +2553,7 @@ async function saveMonitoringProjectTemplate() {
   } catch (error) {
     setMonitoringProjectStatus(batchUtils.cleanParserError(error), 'error');
   } finally {
-    monitoringProjectTemplate.disabled = multiStoreState.running;
+    monitoringProjectTemplate.disabled = multiStoreState.running || monitoringQueueRunning;
   }
 }
 
@@ -2391,7 +2572,7 @@ function renderMonitoringProjectImportErrors(errors) {
 function renderMonitoringProjectHistory(project) {
   const history = Array.isArray(project?.runHistory) ? project.runHistory : [];
   monitoringProjectHistoryCount.textContent = String(history.length);
-  monitoringProjectOpenReports.disabled = multiStoreState.running
+  monitoringProjectOpenReports.disabled = multiStoreState.running || monitoringQueueRunning
     || !history.some((run) => run.reportFileName);
   if (!history.length) {
     const empty = document.createElement('p');
@@ -2407,7 +2588,7 @@ function renderMonitoringProjectHistory(project) {
     const time = document.createElement('strong');
     time.textContent = formatMonitoringProjectDate(run.completedAt);
     const trigger = document.createElement('span');
-    trigger.textContent = run.trigger === 'scheduled' ? 'За розкладом' : 'Вручну';
+    trigger.textContent = run.trigger === 'scheduled' ? 'За розкладом' : run.trigger === 'queue' ? 'Пакетна черга' : 'Вручну';
     const outcome = document.createElement('span');
     outcome.className = `is-${run.outcome}`;
     outcome.textContent = `${outcomeLabels[run.outcome] || run.outcome} · ${run.productCount} рядків`;
@@ -2420,7 +2601,7 @@ function renderMonitoringProjectHistory(project) {
 }
 
 function saveMonitoringProject() {
-  if (multiStoreState.running || !monitoringProjectUtils) return;
+  if (multiStoreState.running || monitoringQueueRunning || !monitoringProjectUtils) return;
   const name = monitoringProjectName.value.trim();
   const query = multiStoreMonitorQuery.value.trim();
   const stores = selectedMonitorStores(multiStoreMonitorStorePicker);
@@ -2468,33 +2649,32 @@ function applyMonitoringProject(project) {
 
 async function runSelectedMonitoringProject() {
   const project = selectedMonitoringProject();
-  if (project) await runMonitoringProject(project, { scheduled: false });
+  if (project && !monitoringQueueRunning) await runMonitoringProject(project, { scheduled: false, queue: false });
 }
 
-async function runMonitoringProject(project, { scheduled }) {
+async function runMonitoringProject(project, { scheduled = false, queue = false } = {}) {
   if (state.parsing || scheduledProjectRunning || isAccessBlocked()) return;
   scheduledProjectRunning = true;
   try {
     if (!multiStoreMonitorDialog.open) multiStoreMonitorDialog.showModal();
     if (!applyMonitoringProject(project)) {
-      await recordMonitoringProjectFailure(project, { scheduled });
-      return;
+      return recordMonitoringProjectFailure(project, { scheduled, queue });
     }
     const queries = batchUtils.splitBrandQueries(project.query);
     const stores = project.stores.filter((store) => allowedMultiStoreIds().includes(store));
     if (!queries.length || stores.length < 2 || !validateMultiStoreDemoCalls(stores, queries.length, setMultiStoreStatus)) {
-      await recordMonitoringProjectFailure(project, { scheduled });
-      return;
+      return recordMonitoringProjectFailure(project, { scheduled, queue });
     }
     const startedAt = new Date();
     monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, startedAt);
     writeMonitoringProjects();
     renderMonitoringProjects(project.id);
-    setMonitoringProjectStatus(`${scheduled ? 'Плановий' : 'Ручний'} запуск проєкту «${project.name}» розпочато.`, 'success');
+    const launchType = scheduled ? 'Плановий' : queue ? 'Пакетний' : 'Ручний';
+    setMonitoringProjectStatus(`${launchType} запуск проєкту «${project.name}» розпочато.`, 'success');
     const result = await runMultiStoreSearch(stores, queries, { reset: true });
     let reportFileName = '';
     let reportSaveFailed = false;
-    if (scheduled && result?.productCount > 0 && typeof parserApi?.autoExportMonitoringProject === 'function') {
+    if ((scheduled || queue) && result?.productCount > 0 && typeof parserApi?.autoExportMonitoringProject === 'function') {
       try {
         const report = await parserApi.autoExportMonitoringProject({
           projectName: project.name,
@@ -2508,7 +2688,7 @@ async function runMonitoringProject(project, { scheduled }) {
         reportFileName = String(report?.fileName || '').trim();
         if (pilotStatisticsEnabled && reportFileName && typeof parserApi?.recordPilotExport === 'function') {
           parserApi.recordPilotExport({
-            mode: 'scheduled_project', stores, productCount: result.productCount,
+            mode: queue ? 'queue_project' : 'scheduled_project', stores, productCount: result.productCount,
             rowCount: result.productCount, brands: queries,
           }).catch(() => {});
         }
@@ -2521,7 +2701,7 @@ async function runMonitoringProject(project, { scheduled }) {
       productCount: result?.productCount || 0,
       startedAt,
       completedAt: new Date(),
-      trigger: scheduled ? 'scheduled' : 'manual',
+      trigger: scheduled ? 'scheduled' : queue ? 'queue' : 'manual',
       reportFileName,
     });
     writeMonitoringProjects();
@@ -2539,17 +2719,23 @@ async function runMonitoringProject(project, { scheduled }) {
     } else if (reportFileName) {
       setMonitoringProjectStatus(`Проєкт «${project.name}» завершено. Excel автоматично збережено: ${reportFileName}`, 'success');
     }
+    return {
+      outcome: result?.outcome || 'error',
+      productCount: result?.productCount || 0,
+      reportFileName,
+      reportSaveFailed,
+    };
   } finally {
     scheduledProjectRunning = false;
   }
 }
 
-async function recordMonitoringProjectFailure(project, { scheduled }) {
+async function recordMonitoringProjectFailure(project, { scheduled = false, queue = false } = {}) {
   const startedAt = new Date();
   monitoringProjects = monitoringProjectUtils.markMonitoringProjectStarted(monitoringProjects, project.id, startedAt);
   monitoringProjects = monitoringProjectUtils.markMonitoringProjectFinished(monitoringProjects, project.id, {
     outcome: 'error', productCount: 0, startedAt, completedAt: new Date(),
-    trigger: scheduled ? 'scheduled' : 'manual',
+    trigger: scheduled ? 'scheduled' : queue ? 'queue' : 'manual',
   });
   writeMonitoringProjects();
   renderMonitoringProjects(project.id);
@@ -2558,6 +2744,7 @@ async function recordMonitoringProjectFailure(project, { scheduled }) {
       projectName: project.name, outcome: 'error', productCount: 0, reportSaved: false,
     }).catch(() => {});
   }
+  return { outcome: 'error', productCount: 0, reportFileName: '', reportSaveFailed: false };
 }
 
 async function openMonitoringProjectReportsFolder() {
@@ -2575,7 +2762,7 @@ async function openMonitoringProjectReportsFolder() {
 
 function deleteMonitoringProject() {
   const project = selectedMonitoringProject();
-  if (!project || multiStoreState.running || !window.confirm(`Видалити проєкт «${project.name}»?`)) return;
+  if (!project || multiStoreState.running || monitoringQueueRunning || !window.confirm(`Видалити проєкт «${project.name}»?`)) return;
   monitoringProjects = monitoringProjectUtils.removeMonitoringProject(monitoringProjects, project.id);
   if (!writeMonitoringProjects()) return setMonitoringProjectStatus('Не вдалося видалити проєкт на цьому комп’ютері.', 'error');
   renderMonitoringProjects();
@@ -2593,7 +2780,7 @@ function startMonitoringProjectScheduler() {
 }
 
 async function checkScheduledMonitoringProjects() {
-  if (state.parsing || scheduledProjectRunning || isAccessBlocked()) return;
+  if (state.parsing || scheduledProjectRunning || monitoringQueueRunning || isAccessBlocked()) return;
   const openDialog = document.querySelector('dialog[open]');
   if (openDialog && openDialog !== multiStoreMonitorDialog) return;
   const project = monitoringProjectUtils.findDueProject(monitoringProjects, new Date());
@@ -3009,7 +3196,7 @@ function openMultiStoreMonitor() {
 }
 
 async function startMultiStoreSearch() {
-  if (!parserAvailable || !multiStoreSearchUtils || state.parsing) return;
+  if (!parserAvailable || !multiStoreSearchUtils || state.parsing || monitoringQueueRunning) return;
   const queries = batchUtils.splitBrandQueries(multiStoreMonitorQuery.value);
   if (!queries.length) {
     setMultiStoreStatus('Введіть одну або кілька торгових марок.', 'error');
@@ -3027,7 +3214,7 @@ async function startMultiStoreSearch() {
 }
 
 async function retryMultiStoreErrors() {
-  if (state.parsing || !multiStoreState.queries.length) return;
+  if (state.parsing || monitoringQueueRunning || !multiStoreState.queries.length) return;
   const stores = multiStoreSearchUtils.failedStoreIds(multiStoreState.reports);
   if (!stores.length) return setMultiStoreStatus('Немає магазинів із помилками для повторної перевірки.', 'idle');
   if (!validateMultiStoreDemoCalls(stores, multiStoreState.queries.length, setMultiStoreStatus)) return;
@@ -3315,28 +3502,32 @@ function renderMultiStoreResults() {
 }
 
 function setMultiStoreBusy(busy) {
-  multiStoreMonitorQuery.disabled = busy;
-  multiStoreMonitorMode.disabled = busy;
-  monitoringProjectSelect.disabled = busy;
-  monitoringProjectName.disabled = busy;
-  monitoringProjectSchedule.disabled = busy;
-  monitoringProjectTime.disabled = busy;
-  monitoringProjectLoad.disabled = busy || !selectedMonitoringProject();
-  monitoringProjectSave.disabled = busy;
-  monitoringProjectRun.disabled = busy || !selectedMonitoringProject() || isAccessBlocked();
-  monitoringProjectDelete.disabled = busy || !selectedMonitoringProject();
-  monitoringProjectOpenReports.disabled = busy
+  const locked = busy || monitoringQueueRunning;
+  multiStoreMonitorQuery.disabled = locked;
+  multiStoreMonitorMode.disabled = locked;
+  monitoringProjectSelect.disabled = locked;
+  monitoringProjectName.disabled = locked;
+  monitoringProjectSchedule.disabled = locked;
+  monitoringProjectTime.disabled = locked;
+  monitoringProjectLoad.disabled = locked || !selectedMonitoringProject();
+  monitoringProjectSave.disabled = locked;
+  monitoringProjectRun.disabled = locked || !selectedMonitoringProject() || isAccessBlocked();
+  monitoringProjectDelete.disabled = locked || !selectedMonitoringProject();
+  monitoringProjectOpenReports.disabled = locked
     || !selectedMonitoringProject()?.runHistory?.some((run) => run.reportFileName);
-  multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = busy; });
+  multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = locked; });
   multiStoreMonitorStart.hidden = busy;
-  multiStoreMonitorStart.disabled = busy || isAccessBlocked();
+  multiStoreMonitorStart.disabled = locked || isAccessBlocked();
   multiStoreMonitorCancel.hidden = !busy;
   multiStoreMonitorCancel.disabled = false;
   multiStoreMonitorClose.disabled = busy;
   multiStoreMonitorRetry.disabled = busy;
   multiStoreMonitorDialog.querySelectorAll('form[method="dialog"] button').forEach((button) => { button.disabled = busy; });
   multiStoreMonitorSpinner.hidden = !busy;
-  if (!busy) renderMonitoringProjectSelection();
+  if (!busy) {
+    renderMonitoringProjectSelection();
+    renderMonitoringProjectQueue();
+  }
 }
 
 function setMultiStoreStatus(message, type = 'idle') {
