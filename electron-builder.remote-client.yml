@@ -24,6 +24,7 @@ files:
   - multi-store-search.js
   - monitoring-projects.js
   - monitoring-project-queue.js
+  - monitoring-project-queue-export.js
   - monitoring-project-import.js
   - multi-store-live-export.js
   - demo-access.js

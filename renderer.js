@@ -194,6 +194,7 @@ const monitoringQueueCount = document.getElementById('monitor-queue-count');
 const monitoringQueueSelectAll = document.getElementById('monitor-queue-select-all');
 const monitoringQueueClear = document.getElementById('monitor-queue-clear');
 const monitoringQueueStart = document.getElementById('monitor-queue-start');
+const monitoringQueueResume = document.getElementById('monitor-queue-resume');
 const monitoringQueueStop = document.getElementById('monitor-queue-stop');
 const monitoringQueueRetryErrors = document.getElementById('monitor-queue-retry-errors');
 const monitoringQueueProgress = document.getElementById('monitor-queue-progress');
@@ -271,6 +272,7 @@ const comparisonAvailable = Boolean(
 const BARCODE_STORE_PREFERENCE_KEY = 'price-monitor:barcode-stores:v1';
 const MULTI_STORE_PREFERENCE_KEY = 'price-monitor:multi-stores:v1';
 const MONITORING_PROJECTS_STORAGE_KEY = 'price-monitor:monitoring-projects:v1';
+const MONITORING_PROJECT_QUEUE_STORAGE_KEY = 'price-monitor:monitoring-project-queue:v1';
 
 let suggestionTimer = null;
 let suggestionRequest = 0;
@@ -320,8 +322,9 @@ const multiStoreState = {
 let monitoringProjectTimer = null;
 let scheduledProjectRunning = false;
 let monitoringQueueRunning = false;
-let monitoringProjectQueue = monitoringQueueUtils?.createMonitoringProjectQueue([], []) || null;
 const monitoringQueueSelectedIds = new Set();
+let monitoringProjectQueue = readMonitoringProjectQueue();
+monitoringProjectQueue?.items?.forEach((item) => monitoringQueueSelectedIds.add(item.projectId));
 
 storeButtons.forEach((button) => {
   button.addEventListener('click', () => selectStore(button.dataset.store));
@@ -437,6 +440,7 @@ monitoringProjectOpenReports.addEventListener('click', openMonitoringProjectRepo
 monitoringQueueSelectAll.addEventListener('click', selectAllMonitoringProjectsForQueue);
 monitoringQueueClear.addEventListener('click', clearMonitoringProjectQueueSelection);
 monitoringQueueStart.addEventListener('click', () => startMonitoringProjectQueue([...monitoringQueueSelectedIds]));
+monitoringQueueResume.addEventListener('click', continueMonitoringProjectQueue);
 monitoringQueueStop.addEventListener('click', stopMonitoringProjectQueue);
 monitoringQueueRetryErrors.addEventListener('click', retryMonitoringProjectQueueErrors);
 monitoringQueueList.addEventListener('change', updateMonitoringProjectQueueSelection);
@@ -516,6 +520,7 @@ window.addEventListener('unhandledrejection', () => recordDiagnosticEvent({ area
 renderSavedLists();
 renderSearchHistory();
 renderMonitoringProjects();
+initializeMonitoringProjectQueueUi();
 initializeAppInfo().catch(() => {});
 
 if (parserAvailable) {
@@ -2292,6 +2297,43 @@ function writeMonitoringProjects() {
   }
 }
 
+function readMonitoringProjectQueue() {
+  if (!monitoringQueueUtils?.normalizeQueue) return null;
+  try {
+    const stored = JSON.parse(localStorage.getItem(MONITORING_PROJECT_QUEUE_STORAGE_KEY) || '{}');
+    return monitoringQueueUtils.recoverMonitoringProjectQueue(stored);
+  } catch (_error) {
+    return monitoringQueueUtils.createMonitoringProjectQueue([], []);
+  }
+}
+
+function writeMonitoringProjectQueue() {
+  if (!monitoringProjectQueue) return false;
+  try {
+    localStorage.setItem(MONITORING_PROJECT_QUEUE_STORAGE_KEY, JSON.stringify(monitoringProjectQueue));
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function initializeMonitoringProjectQueueUi() {
+  if (!monitoringQueueUtils || !monitoringProjectQueue) return;
+  const pending = monitoringQueueUtils.pendingQueueProjectIds(monitoringProjectQueue).length;
+  if (monitoringProjectQueue.status === 'interrupted' && pending) {
+    writeMonitoringProjectQueue();
+    setMonitoringQueueStatus(
+      `Попередню чергу перервано закриттям програми. Готові звіти збережені, незавершених проєктів: ${pending}.`,
+      'warning',
+    );
+  } else if (monitoringProjectQueue.status === 'stopped' && pending) {
+    setMonitoringQueueStatus(`Чергу було зупинено. Незавершених проєктів: ${pending}.`, 'warning');
+  } else if (monitoringProjectQueue.summaryFileName) {
+    setMonitoringQueueStatus(`Останню чергу завершено. Зведення: ${monitoringProjectQueue.summaryFileName}`, 'success');
+  }
+  renderMonitoringProjectQueue();
+}
+
 function renderMonitoringProjects(selectedId = monitoringProjectSelect.value) {
   if (!monitoringProjectUtils) return;
   const availableIds = new Set(monitoringProjects.map((project) => project.id));
@@ -2367,6 +2409,10 @@ function renderMonitoringProjectQueue() {
   monitoringQueueSelectAll.disabled = monitoringQueueRunning || !monitoringProjects.length;
   monitoringQueueClear.disabled = monitoringQueueRunning || !selectedCount;
   monitoringQueueStart.disabled = monitoringQueueRunning || state.parsing || !selectedCount || isAccessBlocked();
+  const pendingIds = monitoringQueueUtils.pendingQueueProjectIds(queue);
+  monitoringQueueResume.hidden = monitoringQueueRunning || !pendingIds.length
+    || !['ready', 'stopped', 'interrupted'].includes(queue.status);
+  monitoringQueueResume.disabled = monitoringQueueRunning || state.parsing || isAccessBlocked();
   monitoringQueueStop.hidden = !monitoringQueueRunning;
   monitoringQueueStop.disabled = queue.status === 'stopping';
   const failedIds = monitoringQueueUtils.failedQueueProjectIds(queue);
@@ -2444,17 +2490,36 @@ async function startMonitoringProjectQueue(projectIds) {
     setMonitoringQueueStatus('Оберіть хоча б один проєкт.', 'error');
     return;
   }
-  monitoringProjectQueue = monitoringQueueUtils.startMonitoringProjectQueue(queue);
+  monitoringProjectQueue = queue;
+  writeMonitoringProjectQueue();
+  await executeMonitoringProjectQueue();
+}
+
+async function continueMonitoringProjectQueue() {
+  if (!monitoringQueueUtils || monitoringQueueRunning || state.parsing || isAccessBlocked()) return;
+  const pendingIds = monitoringQueueUtils.pendingQueueProjectIds(monitoringProjectQueue);
+  if (!pendingIds.length) return;
+  monitoringQueueSelectedIds.clear();
+  monitoringProjectQueue.items.forEach((item) => monitoringQueueSelectedIds.add(item.projectId));
+  await executeMonitoringProjectQueue();
+}
+
+async function executeMonitoringProjectQueue() {
+  monitoringProjectQueue = monitoringQueueUtils.startMonitoringProjectQueue(monitoringProjectQueue);
   monitoringQueueRunning = true;
-  setMonitoringQueueStatus(`Черга запущена: ${queue.items.length} ${ukPlural(queue.items.length, 'проєкт', 'проєкти', 'проєктів')}.`, 'success');
+  writeMonitoringProjectQueue();
+  const pendingAtStart = monitoringQueueUtils.pendingQueueProjectIds(monitoringProjectQueue).length;
+  setMonitoringQueueStatus(`Черга запущена: до виконання ${pendingAtStart} ${ukPlural(pendingAtStart, 'проєкт', 'проєкти', 'проєктів')}.`, 'success');
   renderMonitoringProjectQueue();
   renderMonitoringProjectSelection();
 
   try {
     for (const queueItem of monitoringProjectQueue.items) {
       if (monitoringProjectQueue.stopRequested) break;
+      if (queueItem.status !== 'pending') continue;
       const project = monitoringProjects.find((candidate) => candidate.id === queueItem.projectId);
       monitoringProjectQueue = monitoringQueueUtils.markQueueItemRunning(monitoringProjectQueue, queueItem.projectId);
+      writeMonitoringProjectQueue();
       setMonitoringQueueStatus(`Виконується «${queueItem.name}»…`, 'idle');
       renderMonitoringProjectQueue();
       let result = { outcome: 'error', productCount: 0, reportFileName: '' };
@@ -2466,21 +2531,42 @@ async function startMonitoringProjectQueue(projectIds) {
         }
       }
       monitoringProjectQueue = monitoringQueueUtils.finishQueueItem(monitoringProjectQueue, queueItem.projectId, result);
+      writeMonitoringProjectQueue();
       renderMonitoringProjectQueue();
-      if (isAccessBlocked()) monitoringProjectQueue = monitoringQueueUtils.requestMonitoringProjectQueueStop(monitoringProjectQueue);
+      if (isAccessBlocked()) {
+        monitoringProjectQueue = monitoringQueueUtils.requestMonitoringProjectQueueStop(monitoringProjectQueue);
+        writeMonitoringProjectQueue();
+      }
     }
   } finally {
     monitoringProjectQueue = monitoringQueueUtils.finishMonitoringProjectQueue(monitoringProjectQueue);
+    writeMonitoringProjectQueue();
     monitoringQueueRunning = false;
     const summary = monitoringQueueUtils.queueSummary(monitoringProjectQueue);
     const stopped = monitoringProjectQueue.status === 'stopped';
+    let summaryFileName = '';
+    let summarySaveFailed = false;
+    const finishedCount = summary.completed + summary.failed + summary.cancelled;
+    if (finishedCount && typeof parserApi?.autoExportMonitoringQueueSummary === 'function') {
+      try {
+        const report = await parserApi.autoExportMonitoringQueueSummary(monitoringProjectQueue);
+        summaryFileName = String(report?.fileName || '').trim();
+        monitoringProjectQueue = monitoringQueueUtils.attachQueueSummaryReport(monitoringProjectQueue, summaryFileName);
+        writeMonitoringProjectQueue();
+      } catch (_error) {
+        summarySaveFailed = true;
+      }
+    }
     const detail = [
       `${summary.completed} завершено`,
       summary.failed ? `${summary.failed} з помилкою` : '',
       summary.cancelled ? `${summary.cancelled} зупинено` : '',
       `${summary.reportCount} Excel`,
+      summaryFileName ? `зведення: ${summaryFileName}` : '',
     ].filter(Boolean).join(' · ');
-    setMonitoringQueueStatus(`${stopped ? 'Чергу зупинено' : 'Чергу завершено'}: ${detail}.`, summary.failed || stopped ? 'warning' : 'success');
+    const warning = summary.failed || stopped || summarySaveFailed;
+    const saveNote = summarySaveFailed ? ' Зведений Excel не вдалося зберегти, але окремі звіти залишилися.' : '';
+    setMonitoringQueueStatus(`${stopped ? 'Чергу зупинено' : 'Чергу завершено'}: ${detail}.${saveNote}`, warning ? 'warning' : 'success');
     renderMonitoringProjectQueue();
     renderMonitoringProjectSelection();
   }
@@ -2489,6 +2575,7 @@ async function startMonitoringProjectQueue(projectIds) {
 async function stopMonitoringProjectQueue() {
   if (!monitoringQueueRunning || !monitoringQueueUtils) return;
   monitoringProjectQueue = monitoringQueueUtils.requestMonitoringProjectQueueStop(monitoringProjectQueue);
+  writeMonitoringProjectQueue();
   setMonitoringQueueStatus('Зупиняю поточний проєкт. Уже готові Excel та історія залишаться.', 'warning');
   renderMonitoringProjectQueue();
   if (multiStoreState.running) await cancelMultiStoreSearch();
@@ -2573,7 +2660,7 @@ function renderMonitoringProjectHistory(project) {
   const history = Array.isArray(project?.runHistory) ? project.runHistory : [];
   monitoringProjectHistoryCount.textContent = String(history.length);
   monitoringProjectOpenReports.disabled = multiStoreState.running || monitoringQueueRunning
-    || !history.some((run) => run.reportFileName);
+    || (!history.some((run) => run.reportFileName) && !monitoringProjectQueue?.summaryFileName);
   if (!history.length) {
     const empty = document.createElement('p');
     empty.className = 'monitor-project-history-empty';
@@ -3514,7 +3601,8 @@ function setMultiStoreBusy(busy) {
   monitoringProjectRun.disabled = locked || !selectedMonitoringProject() || isAccessBlocked();
   monitoringProjectDelete.disabled = locked || !selectedMonitoringProject();
   monitoringProjectOpenReports.disabled = locked
-    || !selectedMonitoringProject()?.runHistory?.some((run) => run.reportFileName);
+    || (!selectedMonitoringProject()?.runHistory?.some((run) => run.reportFileName)
+      && !monitoringProjectQueue?.summaryFileName);
   multiStoreMonitorStorePicker.querySelectorAll('input').forEach((input) => { input.disabled = locked; });
   multiStoreMonitorStart.hidden = busy;
   multiStoreMonitorStart.disabled = locked || isAccessBlocked();

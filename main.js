@@ -18,6 +18,7 @@ const { buildCombinedArchiveWorkbook, buildFilteredArchiveWorkbook } = require('
 const { buildCrossStoreChangeReport, buildChangeReportWorkbook } = require('./change-report');
 const { buildCrossStoreBarcodeWorkbook } = require('./cross-store-barcode-export');
 const { buildMultiStoreLiveWorkbook } = require('./multi-store-live-export');
+const { buildMonitoringProjectQueueWorkbook } = require('./monitoring-project-queue-export');
 const { DemoAccessStore } = require('./demo-access');
 const { LicensedAccessStore } = require('./license-access');
 const { DiagnosticEventStore, buildDiagnosticReport } = require('./diagnostic-report');
@@ -811,6 +812,17 @@ function registerIpcHandlers() {
     const project = safeFilePart(payload.projectName) || 'project';
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filePath = await uniqueFilePath(directory, `price_monitor_${project}_${stamp}.xlsx`);
+    const buffer = await writeExcelFile(sheets).toBuffer();
+    await fs.promises.writeFile(filePath, buffer);
+    return { filePath, fileName: path.basename(filePath) };
+  });
+
+  ipcMain.handle('projects:auto-export-queue-summary', async (_event, payload = {}) => {
+    const sheets = buildMonitoringProjectQueueWorkbook(payload);
+    const directory = scheduledReportsDirectory();
+    await fs.promises.mkdir(directory, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath = await uniqueFilePath(directory, `price_monitor_queue_summary_${stamp}.xlsx`);
     const buffer = await writeExcelFile(sheets).toBuffer();
     await fs.promises.writeFile(filePath, buffer);
     return { filePath, fileName: path.basename(filePath) };

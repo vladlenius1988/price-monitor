@@ -3,11 +3,14 @@ const assert = require('node:assert/strict');
 
 const {
   createMonitoringProjectQueue,
+  attachQueueSummaryReport,
   failedQueueProjectIds,
   finishMonitoringProjectQueue,
   finishQueueItem,
   markQueueItemRunning,
+  pendingQueueProjectIds,
   queueSummary,
+  recoverMonitoringProjectQueue,
   requestMonitoringProjectQueueStop,
   startMonitoringProjectQueue,
 } = require('./monitoring-project-queue');
@@ -58,4 +61,23 @@ test('unsafe report file names are not retained', () => {
   let queue = createMonitoringProjectQueue(projects, ['morning']);
   queue = finishQueueItem(queue, 'morning', { outcome: 'success', productCount: 1, reportFileName: '..\\secret.xlsx' });
   assert.equal(queue.items[0].reportFileName, '');
+});
+
+test('interrupted process keeps completed work and makes only the active item resumable', () => {
+  let queue = createMonitoringProjectQueue(projects, ['morning', 'evening', 'weekly']);
+  queue = startMonitoringProjectQueue(queue);
+  queue = finishQueueItem(queue, 'morning', { outcome: 'success', productCount: 25, reportFileName: 'morning.xlsx' });
+  queue = markQueueItemRunning(queue, 'evening');
+  const recovered = recoverMonitoringProjectQueue(queue);
+  assert.equal(recovered.status, 'interrupted');
+  assert.equal(recovered.items[0].status, 'success');
+  assert.equal(recovered.items[1].status, 'pending');
+  assert.deepEqual(pendingQueueProjectIds(recovered), ['evening', 'weekly']);
+  assert.equal(queueSummary(recovered).productCount, 25);
+});
+
+test('queue summary report file is stored safely', () => {
+  const queue = createMonitoringProjectQueue(projects, ['morning']);
+  assert.equal(attachQueueSummaryReport(queue, 'queue-summary.xlsx').summaryFileName, 'queue-summary.xlsx');
+  assert.equal(attachQueueSummaryReport(queue, '..\\secret.xlsx').summaryFileName, '');
 });

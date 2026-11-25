@@ -29,6 +29,7 @@
       createdAt: toIso(createdAt),
       startedAt: '',
       completedAt: '',
+      summaryFileName: '',
       items,
     };
   }
@@ -65,6 +66,27 @@
 
   function requestMonitoringProjectQueueStop(queue) {
     return updateQueue(queue, { status: 'stopping', stopRequested: true });
+  }
+
+  function recoverMonitoringProjectQueue(queue) {
+    const normalized = normalizeQueue(queue);
+    if (!['running', 'stopping'].includes(normalized.status)) return normalized;
+    return {
+      ...normalized,
+      status: 'interrupted',
+      stopRequested: false,
+      completedAt: '',
+      items: normalized.items.map((item) => item.status === 'running' ? {
+        ...item,
+        status: 'pending',
+        startedAt: '',
+        completedAt: '',
+      } : item),
+    };
+  }
+
+  function attachQueueSummaryReport(queue, fileName) {
+    return { ...normalizeQueue(queue), summaryFileName: safeReportFileName(fileName) };
   }
 
   function finishMonitoringProjectQueue(queue, completedAt = new Date()) {
@@ -109,14 +131,21 @@
       .map((item) => item.projectId);
   }
 
+  function pendingQueueProjectIds(queue) {
+    return normalizeQueue(queue).items
+      .filter((item) => item.status === 'pending')
+      .map((item) => item.projectId);
+  }
+
   function normalizeQueue(queue) {
     const source = queue && typeof queue === 'object' ? queue : {};
     return {
-      status: ['ready', 'running', 'stopping', 'stopped', 'completed'].includes(source.status) ? source.status : 'ready',
+      status: ['ready', 'running', 'stopping', 'stopped', 'completed', 'interrupted'].includes(source.status) ? source.status : 'ready',
       stopRequested: Boolean(source.stopRequested),
       createdAt: validIso(source.createdAt),
       startedAt: validIso(source.startedAt),
       completedAt: validIso(source.completedAt),
+      summaryFileName: safeReportFileName(source.summaryFileName),
       items: (Array.isArray(source.items) ? source.items : []).map(normalizeItem).filter(Boolean),
     };
   }
@@ -170,13 +199,16 @@
   }
 
   return {
+    attachQueueSummaryReport,
     createMonitoringProjectQueue,
     failedQueueProjectIds,
     finishMonitoringProjectQueue,
     finishQueueItem,
     markQueueItemRunning,
     normalizeQueue,
+    pendingQueueProjectIds,
     queueSummary,
+    recoverMonitoringProjectQueue,
     requestMonitoringProjectQueueStop,
     startMonitoringProjectQueue,
   };
