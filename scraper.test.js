@@ -1128,7 +1128,7 @@ test('loads batch helpers before the renderer in the packaged interface', () => 
   assert.ok(html.indexOf('<script src="batch.js"></script>') < html.indexOf('<script src="renderer.js"></script>'));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '4.39.0');
+  assert.equal(packageJson.version, '4.40.0');
   assert.ok(packageJson.build.files.includes('batch.js'));
   assert.ok(packageJson.build.files.includes('saved-lists.js'));
   assert.ok(packageJson.build.files.includes('search-history.js'));
@@ -1168,6 +1168,9 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(html, /id="monitor-queue-start"/);
   assert.match(html, /id="monitor-queue-stop"/);
   assert.match(html, /id="monitor-queue-resume"/);
+  assert.match(html, /id="monitor-queue-filter"/);
+  assert.match(html, /id="monitor-queue-store-filter"/);
+  assert.match(html, /id="monitor-queue-outcome-filter"/);
   assert.match(html, /id="monitor-queue-retry-errors"/);
   assert.match(html, /id="barcode-monitor-store-picker"/);
   assert.match(html, /id="barcode-monitor-retry"/);
@@ -1179,6 +1182,8 @@ test('runs selected stores together, retries failures and exports one workbook',
   assert.match(renderer, /async function retryMonitoringProjectQueueErrors/);
   assert.match(renderer, /MONITORING_PROJECT_QUEUE_STORAGE_KEY/);
   assert.match(renderer, /async function continueMonitoringProjectQueue/);
+  assert.match(renderer, /function filteredMonitoringProjectsForQueue/);
+  assert.match(renderer, /function clearMonitoringProjectQueueFilters/);
   assert.match(renderer, /async function retryCrossStoreBarcodeErrors/);
   assert.match(preload, /exportMultiStoreLive: \(payload\) => ipcRenderer\.invoke\('products:export-multi-store-live'/);
   assert.match(preload, /autoExportMonitoringProject: \(payload\) => ipcRenderer\.invoke\('projects:auto-export-multi-store-live'/);

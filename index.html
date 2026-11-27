@@ -363,8 +363,14 @@
       <details class="monitor-project-queue" open>
         <summary>Пакетна черга <span id="monitor-queue-count">0 вибрано</span></summary>
         <p class="monitor-project-queue-hint">Вибрані проєкти запускаються по черзі. Для кожного завершеного проєкту програма окремо зберігає Excel.</p>
+        <div class="monitor-project-queue-filters">
+          <label>Назва або марка<input id="monitor-queue-filter" type="search" maxlength="120" autocomplete="off" placeholder="Наприклад: догляд або Nivea"></label>
+          <label>Магазин<select id="monitor-queue-store-filter"><option value="all">Усі магазини</option><option value="eva">EVA</option><option value="varus">VARUS</option><option value="makeup">MAKEUP</option><option value="aurora">Аврора</option><option value="notino">Notino</option><option value="rozetka">Rozetka</option></select></label>
+          <label>Останній результат<select id="monitor-queue-outcome-filter"><option value="all">Усі результати</option><option value="never">Ще не запускався</option><option value="success">Успішно</option><option value="partial">Частково</option><option value="error">Помилка</option><option value="cancelled">Зупинено</option></select></label>
+          <button id="monitor-queue-clear-filters" class="compact-button" type="button">Очистити фільтри</button>
+        </div>
         <div class="monitor-project-queue-toolbar">
-          <button id="monitor-queue-select-all" class="compact-button" type="button">Вибрати всі</button>
+          <button id="monitor-queue-select-all" class="compact-button" type="button">Вибрати показані</button>
           <button id="monitor-queue-clear" class="compact-button" type="button">Зняти вибір</button>
           <button id="monitor-queue-start" class="primary-button" type="button" disabled>Запустити вибрані</button>
           <button id="monitor-queue-resume" class="primary-button" type="button" hidden>Продовжити незавершені</button>
@@ -587,7 +593,7 @@
           <h3>6. Збережені списки, проєкти та історія</h3>
           <p>Запит можна назвати, зберегти, застосувати, одразу запустити, дублювати, перейменувати або видалити. Разом із марками запам’ятовуються галочки варіантів, продавців і штрихкодів.</p>
           <p class="guide-note"><strong>Проєкти моніторингу:</strong> у вікні «Марка в кількох магазинах» задайте назву, запит, магазини й режим, а потім натисніть «Зберегти проєкт». Його можна застосувати або запустити однією кнопкою. Для щоденного запуску оберіть час і залишайте Price Monitor відкритим: програма виконає проєкт один раз на день, а пропущений час наздожене після запуску цього дня.</p>
-          <p class="guide-note"><strong>Пакетна черга:</strong> позначте потрібні проєкти або натисніть «Вибрати всі», потім «Запустити вибрані». Проєкти виконуються послідовно, для кожного результату автоматично створюється окремий Excel, а наприкінці — зведений Excel усієї черги. «Зупинити без втрати готового» збереже вже завершені звіти й частковий результат поточного проєкту. Якщо програму або комп’ютер вимкнено, після наступного запуску натисніть «Продовжити незавершені»: готові завдання не повторюються. Після завершення можна окремо повторити лише помилки.</p>
+          <p class="guide-note"><strong>Пакетна черга:</strong> знайдіть потрібні проєкти за назвою або маркою, магазином і результатом останнього запуску. «Вибрати показані» додає до черги лише проєкти, які залишилися після фільтрів; уже вибрані приховані проєкти не скидаються. Проєкти виконуються послідовно, для кожного результату автоматично створюється окремий Excel, а наприкінці — зведений Excel усієї черги. «Зупинити без втрати готового» збереже вже завершені звіти й частковий результат поточного проєкту. Якщо програму або комп’ютер вимкнено, після наступного запуску натисніть «Продовжити незавершені»: готові завдання не повторюються. Після завершення можна окремо повторити лише помилки.</p>
           <p class="guide-note"><strong>Після планового запуску:</strong> результат із товарами автоматично зберігається в <code>Документи\Price Monitor\Заплановані звіти</code>, а Windows показує сповіщення про успіх або помилку. У проєкті видно останні 30 запусків, кількість рядків та ім’я створеного Excel. Кнопка «Відкрити папку звітів» одразу відкриває потрібне місце.</p>
           <p>Для кожного магазину окремо зберігаються 12 останніх запитів. Натисніть запис, щоб повернути запит і режими.</p>
         </section>

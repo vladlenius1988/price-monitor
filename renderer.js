@@ -200,6 +200,10 @@ const monitoringQueueRetryErrors = document.getElementById('monitor-queue-retry-
 const monitoringQueueProgress = document.getElementById('monitor-queue-progress');
 const monitoringQueueStatus = document.getElementById('monitor-queue-status');
 const monitoringQueueList = document.getElementById('monitor-queue-list');
+const monitoringQueueFilter = document.getElementById('monitor-queue-filter');
+const monitoringQueueStoreFilter = document.getElementById('monitor-queue-store-filter');
+const monitoringQueueOutcomeFilter = document.getElementById('monitor-queue-outcome-filter');
+const monitoringQueueClearFilters = document.getElementById('monitor-queue-clear-filters');
 const archiveDialog = document.getElementById('archive-dialog');
 const archiveStoreFilter = document.getElementById('archive-store-filter');
 const archiveQueryFilter = document.getElementById('archive-query-filter');
@@ -444,6 +448,10 @@ monitoringQueueResume.addEventListener('click', continueMonitoringProjectQueue);
 monitoringQueueStop.addEventListener('click', stopMonitoringProjectQueue);
 monitoringQueueRetryErrors.addEventListener('click', retryMonitoringProjectQueueErrors);
 monitoringQueueList.addEventListener('change', updateMonitoringProjectQueueSelection);
+monitoringQueueFilter.addEventListener('input', renderMonitoringProjectQueue);
+monitoringQueueStoreFilter.addEventListener('change', renderMonitoringProjectQueue);
+monitoringQueueOutcomeFilter.addEventListener('change', renderMonitoringProjectQueue);
+monitoringQueueClearFilters.addEventListener('click', clearMonitoringProjectQueueFilters);
 multiStoreMonitorQuery.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -2401,12 +2409,13 @@ function renderMonitoringProjectQueue() {
   const queueItems = new Map(queue.items.map((item) => [item.projectId, item]));
   const finished = summary.total - summary.pending - summary.running;
   const selectedCount = monitoringQueueSelectedIds.size;
+  const visibleProjects = filteredMonitoringProjectsForQueue();
   monitoringQueueCount.textContent = monitoringQueueRunning
     ? `${finished}/${summary.total} готово`
-    : `${selectedCount} ${ukPlural(selectedCount, 'вибрано', 'вибрано', 'вибрано')}`;
+    : `${selectedCount} вибрано · ${visibleProjects.length} показано`;
   monitoringQueueProgress.max = Math.max(1, summary.total);
   monitoringQueueProgress.value = Math.max(0, finished);
-  monitoringQueueSelectAll.disabled = monitoringQueueRunning || !monitoringProjects.length;
+  monitoringQueueSelectAll.disabled = monitoringQueueRunning || !visibleProjects.length;
   monitoringQueueClear.disabled = monitoringQueueRunning || !selectedCount;
   monitoringQueueStart.disabled = monitoringQueueRunning || state.parsing || !selectedCount || isAccessBlocked();
   const pendingIds = monitoringQueueUtils.pendingQueueProjectIds(queue);
@@ -2419,10 +2428,12 @@ function renderMonitoringProjectQueue() {
   monitoringQueueRetryErrors.hidden = monitoringQueueRunning || !failedIds.length;
   monitoringQueueRetryErrors.disabled = monitoringQueueRunning || isAccessBlocked();
 
-  if (!monitoringProjects.length) {
+  if (!monitoringProjects.length || !visibleProjects.length) {
     const empty = document.createElement('p');
     empty.className = 'monitor-project-history-empty';
-    empty.textContent = 'Спочатку створіть або імпортуйте проєкти моніторингу.';
+    empty.textContent = monitoringProjects.length
+      ? 'За вибраними фільтрами проєктів немає.'
+      : 'Спочатку створіть або імпортуйте проєкти моніторингу.';
     monitoringQueueList.replaceChildren(empty);
     return;
   }
@@ -2431,7 +2442,7 @@ function renderMonitoringProjectQueue() {
     pending: 'Очікує', running: 'Виконується', success: 'Готово', partial: 'Частково',
     cancelled: 'Зупинено', error: 'Помилка',
   };
-  monitoringQueueList.replaceChildren(...monitoringProjects.map((project) => {
+  monitoringQueueList.replaceChildren(...visibleProjects.map((project) => {
     const item = queueItems.get(project.id);
     const row = document.createElement('div');
     row.className = 'monitor-project-queue-row';
@@ -2459,9 +2470,27 @@ function renderMonitoringProjectQueue() {
 
 function selectAllMonitoringProjectsForQueue() {
   if (monitoringQueueRunning) return;
-  monitoringProjects.forEach((project) => monitoringQueueSelectedIds.add(project.id));
-  setMonitoringQueueStatus(`Вибрано всі проєкти: ${monitoringQueueSelectedIds.size}.`, 'idle');
+  const visibleProjects = filteredMonitoringProjectsForQueue();
+  visibleProjects.forEach((project) => monitoringQueueSelectedIds.add(project.id));
+  setMonitoringQueueStatus(`Додано показаних проєктів: ${visibleProjects.length}. Усього вибрано: ${monitoringQueueSelectedIds.size}.`, 'idle');
   renderMonitoringProjectQueue();
+}
+
+function filteredMonitoringProjectsForQueue() {
+  if (!monitoringQueueUtils?.filterMonitoringProjectsForQueue) return monitoringProjects;
+  return monitoringQueueUtils.filterMonitoringProjectsForQueue(monitoringProjects, {
+    search: monitoringQueueFilter.value,
+    store: monitoringQueueStoreFilter.value,
+    outcome: monitoringQueueOutcomeFilter.value,
+  });
+}
+
+function clearMonitoringProjectQueueFilters() {
+  monitoringQueueFilter.value = '';
+  monitoringQueueStoreFilter.value = 'all';
+  monitoringQueueOutcomeFilter.value = 'all';
+  renderMonitoringProjectQueue();
+  monitoringQueueFilter.focus();
 }
 
 function clearMonitoringProjectQueueSelection() {

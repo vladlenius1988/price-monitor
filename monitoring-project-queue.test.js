@@ -5,6 +5,7 @@ const {
   createMonitoringProjectQueue,
   attachQueueSummaryReport,
   failedQueueProjectIds,
+  filterMonitoringProjectsForQueue,
   finishMonitoringProjectQueue,
   finishQueueItem,
   markQueueItemRunning,
@@ -80,4 +81,16 @@ test('queue summary report file is stored safely', () => {
   const queue = createMonitoringProjectQueue(projects, ['morning']);
   assert.equal(attachQueueSummaryReport(queue, 'queue-summary.xlsx').summaryFileName, 'queue-summary.xlsx');
   assert.equal(attachQueueSummaryReport(queue, '..\\secret.xlsx').summaryFileName, '');
+});
+
+test('filters projects by local name, brand query, store and last outcome', () => {
+  const source = [
+    { id: 'one', name: 'Щоденний догляд', query: 'Estée Lauder', stores: ['eva', 'notino'], lastOutcome: 'success' },
+    { id: 'two', name: 'Макіяж', query: 'Lamel', stores: ['makeup', 'eva'], lastOutcome: 'error' },
+    { id: 'three', name: 'Новий проєкт', query: 'Nivea', stores: ['varus', 'eva'], lastOutcome: '' },
+  ];
+  assert.deepEqual(filterMonitoringProjectsForQueue(source, { search: 'estee' }).map((item) => item.id), ['one']);
+  assert.deepEqual(filterMonitoringProjectsForQueue(source, { store: 'makeup' }).map((item) => item.id), ['two']);
+  assert.deepEqual(filterMonitoringProjectsForQueue(source, { outcome: 'error' }).map((item) => item.id), ['two']);
+  assert.deepEqual(filterMonitoringProjectsForQueue(source, { outcome: 'never' }).map((item) => item.id), ['three']);
 });

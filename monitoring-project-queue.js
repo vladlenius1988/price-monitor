@@ -137,6 +137,22 @@
       .map((item) => item.projectId);
   }
 
+  function filterMonitoringProjectsForQueue(projects, filters = {}) {
+    const search = normalizeFilterText(filters.search);
+    const store = clean(filters.store, 20).toLocaleLowerCase('uk-UA');
+    const outcome = clean(filters.outcome, 20).toLocaleLowerCase('uk-UA');
+    return (Array.isArray(projects) ? projects : []).filter((project) => {
+      const stores = Array.isArray(project?.stores) ? project.stores.map((value) => clean(value, 20).toLocaleLowerCase('uk-UA')) : [];
+      const projectOutcome = clean(project?.lastOutcome, 20).toLocaleLowerCase('uk-UA');
+      if (store && store !== 'all' && !stores.includes(store)) return false;
+      if (outcome && outcome !== 'all') {
+        if (outcome === 'never' ? projectOutcome : projectOutcome !== outcome) return false;
+      }
+      if (!search) return true;
+      return normalizeFilterText(`${project?.name || ''} ${project?.query || ''}`).includes(search);
+    });
+  }
+
   function normalizeQueue(queue) {
     const source = queue && typeof queue === 'object' ? queue : {};
     return {
@@ -187,6 +203,13 @@
     return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
   }
 
+  function normalizeFilterText(value) {
+    return clean(value, 600)
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('uk-UA');
+  }
+
   function toIso(value) {
     const date = value instanceof Date ? value : new Date(value);
     return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
@@ -202,6 +225,7 @@
     attachQueueSummaryReport,
     createMonitoringProjectQueue,
     failedQueueProjectIds,
+    filterMonitoringProjectsForQueue,
     finishMonitoringProjectQueue,
     finishQueueItem,
     markQueueItemRunning,
